@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RSDP GTO Trainer v1.8</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --felt-start: #064e3b; /* Default Emerald */
+            --felt-end: #022c22;
+            
+            /* Card Styles */
+            --card-bg: #ffffff;
+            --card-bg-gradient: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            --card-border: rgba(0,0,0,0.1);
+            
+            /* High Contrast 4-Color Deck Colors */
+            --card-spade: #020617;
+            --card-heart: #dc2626;
+            --card-club: #15803d;
+            --card-diamond: #2563eb;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+            overflow: hidden;
+            touch-action: none; 
+            background-image: radial-gradient(circle at top, #1e293b 0%, #0f172a 100%);
+        }
+        
+        body.dragging { cursor: grabbing !important; }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Dynamic Felt */
+        .poker-felt {
+            background: radial-gradient(circle at 50% 40%, var(--felt-start) 0%, var(--felt-end) 80%);
+            position: relative;
+            transition: background 0.5s ease, box-shadow 0.5s ease;
+        }
+        .poker-felt::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .poker-felt::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.6) 100%);
+            pointer-events: none;
+        }
+        
+        /* Hard Mode Pulse */
+        .hard-mode-pulse {
+            animation: hardPulse 2s infinite;
+        }
+        @keyframes hardPulse {
+            0% { box-shadow: inset 0 0 0 rgba(220, 38, 38, 0); }
+            50% { box-shadow: inset 0 0 50px rgba(220, 38, 38, 0.3); }
+            100% { box-shadow: inset 0 0 0 rgba(220, 38, 38, 0); }
+        }
+
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-modal {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Dynamic Cards */
+        .card {
+            background: var(--card-bg-gradient);
+            border-radius: 14px;
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.3),
+                0 2px 4px -1px rgba(0, 0, 0, 0.2),
+                inset 0 0 0 1px var(--card-border);
+            transform-style: preserve-3d;
+            /* Transition handled by JS for physics */
+        }
+        
+        .suit-s { color: var(--card-spade); }
+        .suit-h { color: var(--card-heart); }
+        .suit-c { color: var(--card-club); }
+        .suit-d { color: var(--card-diamond); }
+
+        /* Neon Glows */
+        .neon-text-emerald { text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .neon-border { box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+
+        /* Shop Items */
+        .shop-item {
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .shop-item:hover { border-color: rgba(255,255,255,0.3); transform: translateY(-2px); }
+        .shop-item.owned { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .shop-item.equipped { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); }
+        .shop-item.locked { opacity: 0.7; }
+
+        /* Save Slots */
+        .save-slot {
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .save-slot:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .save-slot.empty {
+            border-style: dashed;
+            opacity: 0.6;
+        }
+
+        .matrix-cell {
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(255,255,255,0.05);
+            cursor: pointer;
+        }
+        
+        /* Range Editor Cells */
+        .range-cell {
+            transition: all 0.1s;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            background: #1e293b;
+            border: 1px solid #334155;
+        }
+        .range-cell:hover { background: #334155; color: white; }
+        .range-cell.selected {
+            background: #059669;
+            border-color: #10b981;
+            color: white;
+            font-weight: bold;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+        }
+        
+        .info-box-transition { transition: all 0.2s ease; }
+
+        .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-4px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        /* Text Pop Animation */
+        .animate-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* Flash Overlay Animations */
+        .flash-in { animation: flashIn 0.2s ease-out forwards; }
+        .flash-out { animation: flashOut 0.2s ease-in forwards; }
+        
+        @keyframes flashIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1.0); opacity: 1; }
+        }
+        @keyframes flashOut {
+            0% { transform: scale(1.0); opacity: 1; }
+            100% { transform: scale(1.2); opacity: 0; }
+        }
+        
+        /* Toast Animation */
+        .toast-enter { transform: translateY(-100%); opacity: 0; }
+        .toast-enter-active { transform: translateY(0); opacity: 1; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .toast-exit { transform: translateY(0); opacity: 1; }
+        .toast-exit-active { transform: translateY(-100%); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        .timer-bar { transition: width 0.2s linear, background-color 0.3s; }
+        .xp-bar-fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Heat Meter */
+        .heat-meter-bar {
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s, box-shadow 0.5s;
+        }
+        .heat-glow-low { box-shadow: 0 0 5px #34d399; }
+        .heat-glow-med { box-shadow: 0 0 10px #fbbf24; }
+        .heat-glow-high { box-shadow: 0 0 15px #ef4444, 0 0 25px #a855f7; animation: pulse 1.5s infinite; }
+
+        /* Button Gradients */
+        .btn-fold { background: linear-gradient(to bottom, #374151, #1f2937); border-bottom: 4px solid #111827; }
+        .btn-fold:active { border-bottom-width: 0px; transform: translateY(4px); }
+        .btn-call { background: linear-gradient(to bottom, #3b82f6, #2563eb); border-bottom: 4px solid #1e40af; }
+        .btn-call:active { border-bottom-width: 0px; transform: translateY(4px); }
+        .btn-raise { background: linear-gradient(to bottom, #10b981, #059669); border-bottom: 4px solid #065f46; }
+        .btn-raise:active { border-bottom-width: 0px; transform: translateY(4px); }
+
+        /* Swipe Hints Animation */
+        .hint-pulse { animation: hintPulse 1.5s infinite; }
+        @keyframes hintPulse {
+            0%, 100% { transform: scale(1) translate(-50%, 0); opacity: 0.5; }
+            50% { transform: scale(1.1) translate(-50%, 0); opacity: 1; }
+        }
+        
+        /* Hidden file input for import */
+        #fileImportInput { display: none; }
+    </style>
+</head>
+<body class="h-[100dvh] w-screen flex flex-col overflow-hidden relative">
+
+    <!-- Hidden Input for JSON Upload -->
+    <input type="file" id="fileImportInput" accept=".json" onchange="game.importSaveFromFile(this)">
+
+    <!-- TOAST CONTAINER -->
+    <div id="toastContainer" class="fixed top-4 left-0 right-0 z-[120] flex flex-col items-center gap-2 pointer-events-none"></div>
+
+    <!-- SWIPE GUIDES (Visible on Drag) -->
+    <div id="swipeOverlay" class="pointer-events-none fixed inset-0 z-40 hidden transition-opacity duration-300 opacity-0">
+        <!-- Raise (Up) -->
+        <div id="hintRaise" class="absolute top-24 left-1/2 -translate-x-1/2 text-emerald-400 font-black text-2xl uppercase tracking-widest flex flex-col items-center gap-2 transition-all duration-200 scale-90 opacity-30">
+            <i class="ph-bold ph-arrow-up text-4xl animate-bounce"></i>
+            <span class="drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">RAISE</span>
+        </div>
+        <!-- Call (Right) -->
+        <div id="hintCall" class="absolute right-4 md:right-12 top-1/2 -translate-y-1/2 text-blue-400 font-black text-2xl uppercase tracking-widest flex flex-col items-center gap-2 transition-all duration-200 scale-90 opacity-30">
+            <i class="ph-bold ph-arrow-right text-4xl animate-pulse"></i>
+            <span class="drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">CALL</span>
+        </div>
+        <!-- Fold (Left) -->
+        <div id="hintFold" class="absolute left-4 md:left-12 top-1/2 -translate-y-1/2 text-slate-500 font-black text-2xl uppercase tracking-widest flex flex-col items-center gap-2 transition-all duration-200 scale-90 opacity-30">
+            <i class="ph-bold ph-arrow-left text-4xl animate-pulse"></i>
+            <span class="drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">FOLD</span>
+        </div>
+    </div>
+
+    <!-- FLASH OVERLAY -->
+    <div id="flashOverlay" class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none hidden">
+        <div id="flashText" class="text-6xl md:text-8xl font-black uppercase tracking-tighter drop-shadow-[0_0_25px_rgba(0,0,0,1)] transform transition-all duration-300 scale-0 text-center px-4"></div>
+    </div>
+
+    <!-- SPLASH SCREEN -->
+    <div id="splashScreen" class="fixed inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center p-4 transition-opacity duration-500">
+        <div class="max-w-md w-full text-center space-y-8 relative">
+            <!-- Logo/Title -->
+            <div class="animate-in fade-in zoom-in duration-700">
+                <i class="ph-fill ph-spade text-6xl text-emerald-500 mb-4 inline-block animate-bounce"></i>
+                <h1 class="text-4xl md:text-6xl font-black text-white tracking-tighter mb-2">RSDP <span class="text-emerald-500">GTO</span></h1>
+                <p class="text-xl text-slate-400 font-mono tracking-widest uppercase">TRAINER</p>
+            </div>
+
+            <!-- Start Buttons -->
+            <div class="animate-in slide-in-from-bottom-8 duration-700 delay-200 w-full space-y-3">
+                <button onclick="game.startGame()" class="w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-2xl rounded-2xl shadow-2xl shadow-emerald-900/40 transition-all hover:scale-[1.03] active:scale-[0.98] border-b-4 border-emerald-800 flex items-center justify-center gap-3">
+                    <i class="ph-bold ph-play"></i> START GRINDING
+                </button>
+                
+                <div class="mt-6 text-slate-500 text-xs font-mono">
+                    100BB 6-MAX & 9-MAX SOLVER RANGES
+                </div>
+            </div>
+            
+            <div class="absolute -bottom-16 right-0 text-[10px] font-mono text-slate-600">v1.8 (Cloud Configured)</div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="h-16 md:h-20 glass-panel flex items-center justify-between px-3 md:px-6 shrink-0 z-20 gap-2 md:gap-4 relative">
+        
+        <!-- Left: Rank & XP -->
+        <div class="flex flex-col w-1/3">
+            <div class="flex items-center gap-2 md:gap-3 mb-0.5 md:mb-1.5">
+                <div class="w-7 h-7 md:w-9 md:h-9 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-700 flex items-center justify-center font-black text-white text-xs md:text-sm neon-border shadow-lg shrink-0 border border-emerald-300/30">
+                    <span id="levelBadge">1</span>
+                </div>
+                <div class="flex flex-col truncate">
+                    <span id="rankTitle" class="text-[9px] md:text-xs font-black text-emerald-400 uppercase tracking-widest truncate neon-text-emerald">MICRO FISH</span>
+                    <span class="text-[8px] md:text-[9px] text-slate-400 font-medium hidden md:block">XP Progression</span>
+                </div>
+            </div>
+            <!-- XP Bar -->
+            <div class="w-full h-2 md:h-3.5 bg-slate-800/50 rounded-full overflow-hidden relative ring-1 ring-white/5 mt-0.5 md:mt-1">
+                <div id="xpBar" class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 xp-bar-fill w-0"></div>
+                <div id="xpText" class="absolute inset-0 flex items-center justify-center text-[7px] md:text-[9px] font-bold text-white/90 drop-shadow-md tracking-wider font-mono z-10">0 / 500 XP</div>
+            </div>
+        </div>
+
+        <!-- Center: Bankroll -->
+        <div class="flex flex-col items-center justify-center w-1/3 shrink-0">
+            <div class="text-[8px] md:text-[9px] text-slate-400 uppercase tracking-[0.2em] mb-0.5 md:mb-1 font-bold">Bankroll</div>
+            <div class="font-mono text-lg md:text-3xl font-black text-white tracking-tight flex items-center gap-1 drop-shadow-lg">
+                <span class="text-emerald-500">$</span><span id="bankrollDisplay">1,000</span>
+            </div>
+        </div>
+
+        <!-- Right: Multiplier & Shop -->
+        <div class="flex flex-col items-end w-1/3">
+            <div class="flex items-center gap-1 md:gap-3">
+                <!-- Controls (Condensed for Mobile) -->
+                <button id="soundToggle" onclick="game.toggleSound()" class="hidden md:block text-emerald-400 hover:text-emerald-300 transition-colors p-2" title="Sound Effects">
+                    <i id="soundIcon" class="ph-fill ph-speaker-high text-xl"></i>
+                </button>
+                <button id="saveToggle" onclick="game.toggleSaves()" class="hidden md:block text-slate-500 hover:text-purple-400 transition-colors p-2" title="Save/Load Game">
+                    <i class="ph-fill ph-floppy-disk text-xl"></i>
+                </button>
+                
+                <!-- Visible on Mobile & Desktop -->
+                <button id="statsToggle" onclick="game.toggleStats()" class="text-slate-500 hover:text-blue-400 transition-colors p-1.5 md:p-2" title="Leak Finder Stats">
+                    <i class="ph-fill ph-chart-bar text-lg md:text-xl"></i>
+                </button>
+                <button id="shopToggle" onclick="game.toggleShop()" class="text-slate-500 hover:text-yellow-400 transition-colors p-1.5 md:p-2 relative" title="Grinder Shop">
+                    <i class="ph-fill ph-shopping-cart text-lg md:text-xl"></i>
+                </button>
+                <button id="pauseToggle" onclick="game.togglePause()" class="text-slate-500 hover:text-yellow-400 transition-colors p-1.5 md:p-2" title="Pause Game">
+                    <i id="pauseIcon" class="ph-fill ph-pause text-lg md:text-xl"></i>
+                </button>
+                
+                <!-- Multiplier & Streak -->
+                <div class="flex flex-col items-end mr-1 hidden lg:flex">
+                    <div id="multiplierBadge" class="text-sm font-black text-slate-500 transition-colors">1x</div>
+                    <span class="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Multiplier</span>
+                </div>
+
+                <div class="w-9 h-9 md:w-11 md:h-11 rounded-full border-2 border-slate-700/50 flex items-center justify-center bg-slate-800/50 relative overflow-hidden shadow-inner ml-1 shrink-0">
+                     <i id="streakIcon" class="ph-fill ph-fire text-slate-600 text-lg md:text-xl transition-all duration-300"></i>
+                     <div class="absolute bottom-0 w-full h-1 bg-slate-700" id="streakBar"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- SUB-HEADER (Mode Select & Toggle) -->
+    <div class="bg-slate-900/40 border-b border-white/5 px-3 md:px-6 py-2 flex justify-between items-center shrink-0 backdrop-blur-sm min-h-[52px]">
+         <div class="flex flex-col gap-1.5 w-full md:w-auto">
+             <div class="flex gap-2 items-center">
+                 <div class="relative w-full md:w-56">
+                    <select id="modeSelect" class="w-full appearance-none bg-slate-800/80 text-[10px] md:text-xs font-bold text-slate-200 pl-2 pr-6 py-1 md:pl-3 md:pr-8 md:py-1.5 rounded border border-white/10 focus:outline-none focus:border-emerald-500/50 hover:bg-slate-800 transition-colors cursor-pointer shadow-sm">
+                        <option value="rfi">Drill: 6-Max Cash RFI</option>
+                        <option value="def">Drill: 6-Max Cash BB Defense</option>
+                        <option value="mtt_rfi">Drill: 9-Max MTT RFI</option>
+                        <option value="campaign">Campaign: The Ladder</option>
+                        <option value="custom">Custom Drill (RFI)</option>
+                    </select>
+                    <i class="ph-bold ph-caret-down absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
+                 </div>
+                 <!-- Edit Range Button (Hidden by default) -->
+                 <button id="editRangeBtn" onclick="game.openCustomRangeModal()" class="hidden px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold rounded border border-purple-400/30 uppercase tracking-wider whitespace-nowrap transition-colors flex items-center gap-1">
+                    <i class="ph-bold ph-pencil-simple"></i> <span>EDIT</span>
+                 </button>
+             </div>
+             
+             <!-- FILTER TOGGLE WITH METER -->
+             <div class="flex items-center gap-3">
+                <label id="edgeCaseLabel" class="flex items-center gap-1.5 cursor-pointer group opacity-50 pointer-events-none transition-opacity" title="Only available in 6-Max Cash modes">
+                    <div class="relative">
+                        <input type="checkbox" id="edgeCaseToggle" class="peer sr-only">
+                        <div class="w-6 h-3 bg-slate-800 rounded-full peer-checked:bg-emerald-600 peer-checked:border-emerald-500/50 border border-slate-700 transition-all"></div>
+                        <div class="absolute left-0.5 top-0.5 w-2 h-2 bg-slate-400 rounded-full transition-all peer-checked:translate-x-3 peer-checked:bg-white"></div>
+                    </div>
+                    <span class="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 transition-colors uppercase tracking-wider">Adaptive Difficulty</span>
+                </label>
+                
+                <!-- Heat Meter -->
+                <div id="adaptiveMeterContainer" class="hidden flex items-center gap-1.5 bg-slate-950/50 px-2 py-1 rounded-full border border-white/5">
+                    <div class="text-[8px] font-mono font-bold text-slate-400 uppercase">Heat</div>
+                    <div class="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                        <div id="adaptiveHeatBar" class="h-full w-0 heat-meter-bar"></div>
+                    </div>
+                </div>
+             </div>
+         </div>
+         
+        <div class="flex items-center gap-2 md:gap-3 hidden md:flex">
+            <div id="levelIndicator" class="hidden md:block text-[9px] font-mono text-yellow-400 font-bold uppercase tracking-wider bg-yellow-900/20 px-2 py-1 rounded border border-yellow-500/30">Lvl 1: Rock</div>
+            <div class="text-[9px] md:text-[10px] font-mono text-slate-500 uppercase tracking-wider" id="handCounter">Hand #1</div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        <!-- LEFT: FELT AREA -->
+        <main class="flex-1 relative flex flex-col justify-center items-center p-4" id="gameFelt">
+            
+             <!-- Info Overlay (Top) -->
+            <div class="absolute top-6 left-0 right-0 flex justify-center gap-8 text-xs md:text-sm font-bold text-white/70 uppercase tracking-widest pointer-events-none z-10">
+                <div id="villainDisplay" class="hidden flex flex-col items-center gap-2 animate-fade-in">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-b from-red-900 to-red-950 border-2 border-red-500/50 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.3)] relative">
+                        <span id="villainPosText" class="font-black text-red-100 text-shadow">CO</span>
+                        <div class="absolute -bottom-2 -right-2 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-red-400 font-bold">R</div>
+                    </div>
+                    <span class="text-[10px] text-red-400/80 font-bold tracking-widest">VILLAIN</span>
+                </div>
+            </div>
+
+            <!-- Center Pot/Board Area -->
+            <div class="flex flex-col items-center gap-4 relative z-10 w-full">
+                <!-- Floating Profit -->
+                <div id="floatingProfit" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none whitespace-nowrap z-30 opacity-0 scale-50"></div>
+                
+                <div class="flex gap-4 perspective-1000" id="holeCardsArea">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- Hero Info -->
+            <div class="absolute bottom-6 flex items-center gap-3 z-10 pointer-events-none">
+                <div class="relative group pointer-events-auto">
+                    <div class="w-16 h-16 rounded-full bg-gradient-to-b from-slate-800 to-slate-900 border-2 border-emerald-500 flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.2)] z-10 relative group-hover:scale-105 transition-transform duration-300">
+                        <span id="heroPosText" class="font-black text-lg text-white tracking-tighter">BTN</span>
+                    </div>
+                    <!-- Card Protector (Dynamic) -->
+                    <div id="heroProtector" class="hidden absolute bottom-0 -right-12 w-10 h-10 animate-float z-20 filter drop-shadow-lg transition-all duration-500">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer Bar for Mobile (Shows at bottom of felt area) -->
+            <div class="absolute bottom-0 left-0 w-full h-1.5 bg-slate-900 md:hidden">
+                 <div id="timerBar" class="h-full bg-emerald-500 w-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+            </div>
+
+        </main>
+
+        <!-- RIGHT SIDEBAR (DESKTOP ONLY - For Controls) -->
+        <aside class="hidden md:flex w-80 glass-panel border-l border-white/10 flex-col justify-between p-6 shrink-0 z-30 relative overflow-y-auto">
+             <!-- Stats in Sidebar -->
+             <div class="space-y-6">
+                <div class="p-4 bg-slate-900/50 rounded-xl border border-white/5 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Current Streak</div>
+                    <div class="text-3xl font-black text-white flex items-center justify-center gap-2">
+                         <i class="ph-fill ph-fire text-orange-500"></i> <span id="desktopStreak">0</span>
+                    </div>
+                </div>
+                
+                <!-- Timer for Desktop -->
+                <div>
+                    <div class="flex justify-between text-[10px] text-slate-400 font-bold uppercase mb-1">
+                        <span>Decision Time</span>
+                    </div>
+                    <div class="h-4 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                        <div id="desktopTimerBar" class="h-full bg-cyan-500 w-full transition-all duration-200 shadow-[0_0_10px_rgba(6,182,212,0.5)]"></div>
+                    </div>
+                </div>
+             </div>
+
+             <!-- Desktop Buttons -->
+             <div class="flex flex-col gap-3" id="desktopActionButtons">
+                <button onclick="game.handleInput('raise')" class="h-20 btn-raise rounded-xl text-white font-black text-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    <span id="raiseLabelDesktop">RAISE</span> <span class="text-xs opacity-60 font-normal">(R)</span>
+                </button>
+                <button onclick="game.handleInput('call')" id="desktopBtnCall" class="h-16 btn-call rounded-xl text-white font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    CALL <span class="text-xs opacity-60 font-normal">(C)</span>
+                </button>
+                <button onclick="game.handleInput('fold')" class="h-16 btn-fold rounded-xl text-white font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    FOLD <span class="text-xs opacity-60 font-normal">(F)</span>
+                </button>
+
+                <!-- Manual Analysis Button (Desktop) -->
+                <button onclick="game.reviewLastHand()" class="mt-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-bold text-xs rounded-lg border border-white/5 flex items-center justify-center gap-2 transition-all">
+                    <i class="ph-fill ph-graph"></i> LAST HAND ANALYSIS
+                </button>
+             </div>
+             
+             <div class="text-center mt-auto pt-6">
+                 <div class="text-[10px] font-mono text-slate-600">v1.8</div>
+             </div>
+        </aside>
+
+        <!-- MOBILE FOOTER (Buttons Only) -->
+        <footer class="md:hidden glass-panel p-3 pb-6 shrink-0 z-30 flex flex-col gap-2">
+            <div class="grid grid-cols-3 gap-2" id="mobileActionButtons">
+                 <button onclick="game.handleInput('fold')" class="btn-fold h-16 rounded-xl text-white font-bold text-lg flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform">
+                    <span>FOLD</span>
+                </button>
+                <button onclick="game.handleInput('call')" id="btnCall" class="btn-call h-16 rounded-xl text-white font-bold text-lg flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform">
+                    <span>CALL</span>
+                </button>
+                <button onclick="game.handleInput('raise')" id="mobileBtnRaise" class="btn-raise h-16 rounded-xl text-white font-bold text-lg flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform">
+                    <span id="raiseLabel">RAISE</span>
+                </button>
+            </div>
+            <!-- Manual Analysis Button (Mobile) -->
+            <button onclick="game.reviewLastHand()" class="w-full py-3 bg-slate-800/80 hover:bg-slate-700 text-slate-400 font-bold text-[10px] rounded-lg border border-white/5 flex items-center justify-center gap-2 uppercase tracking-wider">
+                 <i class="ph-bold ph-graph"></i> Review Last Hand
+            </button>
+        </footer>
+
+    </div>
+
+    <!-- PAUSE MODAL -->
+    <div id="pauseModal" class="fixed inset-0 z-[60] hidden flex-col items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div class="text-center space-y-6">
+                <div>
+                    <h2 class="text-4xl font-black text-white tracking-tight mb-2 neon-text-emerald">GAME PAUSED</h2>
+                    <p class="text-slate-400 mb-4 font-medium">Take a breath. Refocus.</p>
+                </div>
+                
+                <button onclick="game.togglePause()" class="w-64 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                    <i class="ph-bold ph-play"></i> RESUME GAME
+                </button>
+                
+                <button onclick="game.exitToMenu()" class="w-64 px-8 py-3 bg-red-900/50 hover:bg-red-800 text-red-200 font-bold rounded-xl border border-red-800/50 transition-transform flex items-center justify-center gap-2 mx-auto">
+                    <i class="ph-bold ph-sign-out"></i> EXIT TO MENU
+                </button>
+
+                <div class="grid grid-cols-2 gap-4 w-64 mx-auto md:hidden pt-4 border-t border-white/10">
+                    <button onclick="game.toggleSound()" class="py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold text-xs flex items-center justify-center gap-2">
+                        <i class="ph-fill ph-speaker-high"></i> SOUND
+                    </button>
+                    <button onclick="game.toggleSaves()" class="py-3 bg-purple-900/50 hover:bg-purple-900/80 text-purple-300 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-purple-500/20">
+                        <i class="ph-fill ph-floppy-disk"></i> SAVES
+                    </button>
+                </div>
+            </div>
+    </div>
+    
+    <!-- CUSTOM RANGE MODAL (UPDATED WITH VISUAL GRID & PRESETS) -->
+    <div id="customRangeModal" class="fixed inset-0 z-[110] hidden flex-col items-center justify-center p-4 bg-slate-950/95 backdrop-blur-xl animate-in zoom-in duration-300">
+        <div class="max-w-2xl w-full bg-slate-900 rounded-2xl border border-white/10 shadow-2xl p-6 flex flex-col max-h-[95vh]">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <div>
+                    <h3 class="text-2xl font-black text-white uppercase tracking-tighter">CUSTOM RFI RANGE</h3>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Select hands to RAISE. All others are Folds.</p>
+                </div>
+                <button onclick="game.closeCustomRangeModal()" class="text-slate-400 hover:text-white"><i class="ph-bold ph-x text-2xl"></i></button>
+            </div>
+            
+            <div class="flex flex-col md:flex-row gap-4 overflow-hidden flex-1 min-h-0">
+                <!-- Visual Grid -->
+                <div class="flex flex-col items-center gap-2">
+                     <div id="rangeGrid" class="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-[1px] bg-slate-800 w-[280px] h-[280px] sm:w-[360px] sm:h-[360px] border border-slate-700 shadow-xl">
+                         <!-- Injected JS -->
+                     </div>
+                     
+                     <!-- Quick Actions -->
+                     <div class="grid grid-cols-3 gap-2 w-full max-w-[360px]">
+                         <button onclick="game.rangeAction('clear')" class="bg-red-900/30 hover:bg-red-900/50 text-red-300 text-[9px] font-bold py-2 rounded border border-red-500/20">CLEAR</button>
+                         <button onclick="game.rangeAction('pairs')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">PAIRS</button>
+                         <button onclick="game.rangeAction('broadway')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">BROADWAYS</button>
+                         <button onclick="game.rangeAction('suited')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">SUITED</button>
+                         <button onclick="game.rangeAction('offsuit')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">OFFSUIT</button>
+                         <button onclick="game.rangeAction('fill')" class="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 text-[9px] font-bold py-2 rounded border border-emerald-500/20">ALL</button>
+                     </div>
+                </div>
+
+                <!-- Text Output (Read Only/Copy) & Controls -->
+                <div class="flex flex-col flex-1 gap-2 min-h-0">
+                    <!-- NEW: GTO PRESETS SECTION -->
+                    <div class="bg-slate-950/50 p-3 rounded-xl border border-white/5 mb-1">
+                        <div class="text-[9px] text-purple-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-1">
+                            <i class="ph-fill ph-lightning"></i> Load GTO Preset (6-Max)
+                        </div>
+                        <div class="grid grid-cols-5 gap-1">
+                            <button onclick="game.loadGTOPreset('UTG')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">UTG</button>
+                            <button onclick="game.loadGTOPreset('HJ')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">HJ</button>
+                            <button onclick="game.loadGTOPreset('CO')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">CO</button>
+                            <button onclick="game.loadGTOPreset('BTN')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">BTN</button>
+                            <button onclick="game.loadGTOPreset('SB')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">SB</button>
+                        </div>
+                    </div>
+
+                    <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Range String</div>
+                    <textarea id="customRangeInput" class="w-full flex-1 bg-slate-950 border border-slate-700 rounded-lg p-3 text-[10px] font-mono text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors resize-none" readonly></textarea>
+                    
+                    <div class="mt-auto pt-2 flex flex-col gap-2">
+                        <button onclick="game.saveCustomRange()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2">
+                            <i class="ph-bold ph-check"></i> SAVE & PLAY
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LEVEL UP MODAL -->
+    <div id="levelUpModal" class="fixed inset-0 z-[100] hidden flex-col items-center justify-center p-4 bg-emerald-900/90 backdrop-blur-xl animate-in zoom-in duration-500">
+        <div class="text-center space-y-4">
+            <div class="inline-flex p-4 rounded-full bg-emerald-500 text-white shadow-[0_0_50px_rgba(16,185,129,0.6)] animate-bounce">
+                <i class="ph-fill ph-trophy text-5xl"></i>
+            </div>
+            <h2 class="text-5xl font-black text-white tracking-tighter">LEVEL UP!</h2>
+            <p class="text-emerald-200 text-lg font-bold tracking-wider" id="levelUpText">You are now The Thief</p>
+             <div class="py-6">
+                <div class="text-xs font-mono text-emerald-300 uppercase tracking-widest mb-1">Bonus Reward</div>
+                <div class="text-4xl font-black text-white">+$1,000</div>
+            </div>
+            <button onclick="game.closeLevelUp()" class="w-64 px-8 py-4 bg-white text-emerald-900 font-black rounded-xl shadow-2xl transition-transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                CONTINUE CAMPAIGN
+            </button>
+        </div>
+    </div>
+
+    <!-- LEAK FINDER (STATS) MODAL -->
+    <div id="statsModal" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl ring-1 ring-white/10 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                    <h2 class="text-2xl font-black italic uppercase tracking-tighter text-white">LEAK FINDER</h2>
+                    <div class="text-sm font-mono text-blue-400 font-bold mt-1">PERFORMANCE HEATMAP</div>
+                </div>
+                <button onclick="game.toggleStats()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="ph-bold ph-x text-2xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto no-scrollbar flex flex-col items-center">
+                <div class="relative p-4">
+                    <div class="flex flex-col">
+                        <div class="flex mb-1 pl-4 w-[260px]">
+                            <div class="grid grid-cols-[repeat(13,minmax(0,1fr))] w-full text-[7px] text-slate-500 font-mono text-center">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                        </div>
+                        <div class="flex">
+                            <div class="flex flex-col justify-between h-[260px] mr-1 text-[7px] text-slate-500 font-mono">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                            <div id="statsGrid" class="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-[1px] bg-slate-800 w-[260px] h-[260px] border border-slate-800 shadow-2xl"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="selectedHandStats" class="mt-2 bg-slate-900/80 p-3 rounded-lg w-[260px] border border-white/10 flex items-center justify-center h-12 info-box-transition text-xs font-bold text-slate-400">Tap a cell for details</div>
+                <div class="w-[260px] mt-3 flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-red-600/80 rounded-sm"></div> Leak</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-yellow-500/80 rounded-sm"></div> OK</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-emerald-500/80 rounded-sm"></div> Good</div>
+                </div>
+                <button onclick="game.resetStats()" class="mt-6 text-[10px] text-red-500/50 hover:text-red-400 underline uppercase tracking-widest font-bold transition-colors">Reset Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SAVE/LOAD MODAL -->
+    <div id="saveModal" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl ring-1 ring-white/10 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                    <h2 class="text-2xl font-black italic uppercase tracking-tighter text-white">SAVE SLOTS</h2>
+                    <div class="text-xs font-mono text-purple-400 font-bold mt-1">MANAGE YOUR PROGRESS</div>
+                </div>
+                <button onclick="game.toggleSaves()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="ph-bold ph-x text-2xl"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto no-scrollbar flex flex-col gap-4">
+                <div id="saveSlotContainer"></div>
+                
+                <!-- FILE IMPORT/EXPORT SECTION -->
+                <div class="pt-4 mt-4 border-t border-white/10">
+                     <div class="flex items-center gap-2 mb-3">
+                        <i class="ph-fill ph-file-cloud text-blue-400"></i>
+                        <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wide">Manual Backup</h3>
+                     </div>
+                     <p class="text-[10px] text-slate-500 mb-3 leading-relaxed">
+                         <strong class="text-emerald-400">PERSISTENCE FIX:</strong> Browser storage may be wiped in this environment. Download your save file to keep it safe.
+                     </p>
+                     <div class="flex gap-2">
+                         <button onclick="game.triggerFileImport()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-3 rounded-lg border border-white/5 flex items-center justify-center gap-2 transition-colors shadow-lg">
+                             <i class="ph-bold ph-upload-simple"></i> UPLOAD SAVE
+                         </button>
+                     </div>
+                     <!-- Fallback String Sync -->
+                     <div id="syncBoxContainer" class="hidden mt-4">
+                         <textarea id="syncStringInput" class="w-full h-24 bg-slate-950 border border-slate-700 rounded-lg p-3 text-[10px] font-mono text-emerald-400 focus:outline-none focus:border-emerald-500 mb-2 resize-none placeholder-slate-600"></textarea>
+                         <button id="syncActionBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 rounded-lg shadow-lg">LOAD</button>
+                     </div>
+                     <button onclick="game.prepareExport()" class="text-[10px] text-slate-600 underline mt-2 w-full text-center hover:text-slate-400">View Legacy Sync String</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SHOP MODAL -->
+    <div id="shopModal" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl ring-1 ring-white/10 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                    <h2 class="text-2xl font-black italic uppercase tracking-tighter text-white">THE GRINDER SHOP</h2>
+                    <div class="text-sm font-mono text-emerald-400 font-bold flex items-center gap-2 mt-1">
+                        BANKROLL: $<span id="shopBankroll">0</span>
+                    </div>
+                </div>
+                <button onclick="game.toggleShop()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="ph-bold ph-x text-2xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto no-scrollbar">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 mt-2">Card Protectors (Lucky Charms)</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8" id="shopProtectors"></div>
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Table Felts</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8" id="shopFelts"></div>
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Card Decks</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="shopDecks"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEEDBACK MODAL -->
+    <div id="feedbackModal" class="fixed inset-0 z-[55] hidden flex-col items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto no-scrollbar flex flex-col shadow-2xl ring-1 ring-white/10">
+            <div class="p-5 border-b border-white/5 flex justify-between items-start bg-white/5">
+                <div>
+                    <h2 id="feedbackTitle" class="text-2xl font-black italic uppercase tracking-tighter drop-shadow-md">CORRECT</h2>
+                    <p id="feedbackSubtitle" class="text-xs text-slate-400 mt-1 font-medium">BTN should Raise A5s vs CO Open</p>
+                    <div id="rewardDetails" class="mt-2 flex gap-2 text-[10px] font-mono font-bold"></div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">YOUR HAND</div>
+                    <div id="feedbackHand" class="font-mono font-bold text-lg text-white bg-slate-800/50 px-2 py-1 rounded border border-white/5">A<span class="text-red-500">♥</span> 5<span class="text-red-500">♥</span></div>
+                </div>
+                <button onclick="game.nextHand()" class="text-slate-400 hover:text-white ml-2">
+                     <i class="ph-bold ph-x text-xl"></i>
+                </button>
+            </div>
+            <div class="p-5 flex flex-col items-center bg-slate-950/50">
+                <div class="relative p-2">
+                     <div class="flex flex-col">
+                        <div class="flex mb-1 pl-4 w-[240px]">
+                            <div class="grid grid-cols-[repeat(13,minmax(0,1fr))] w-full text-[7px] text-slate-500 font-mono text-center">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                        </div>
+                        <div class="flex">
+                            <div class="flex flex-col justify-between h-[240px] mr-1 text-[7px] text-slate-500 font-mono">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                            <div id="matrixGrid" class="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-[1px] bg-slate-800 w-[240px] h-[240px] border border-slate-800 shadow-lg"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="matrixInfo" class="mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 border border-white/5 info-box-transition">Hover for info</div>
+            </div>
+            <div id="feedbackLegend" class="px-6 pb-2 flex justify-center gap-4 text-[9px] uppercase tracking-wider font-bold text-slate-500">
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-sm bg-emerald-500 shadow-sm"></div> <span id="legendRaiseText">Raise</span></div>
+                <div id="feedbackLegendCall" class="flex items-center gap-1"><div class="w-2 h-2 rounded-sm bg-blue-500 shadow-sm"></div> Call</div>
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-sm bg-slate-700"></div> Fold</div>
+            </div>
+             <div class="p-4 bg-slate-900/50 border-t border-white/5 text-center">
+                 <div class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-2">PRESS SPACE TO CONTINUE</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHANGE 1: Update Script to Module for Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // --- PASTE YOUR FIREBASE CONFIG HERE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBJmt_4AOH72MVqMCz6EdrEF-XLmzwwhZs",
+            authDomain: "rsdp-trainer.firebaseapp.com",
+            projectId: "rsdp-trainer",
+            storageBucket: "rsdp-trainer.firebasestorage.app",
+            messagingSenderId: "785118381156",
+            appId: "1:785118381156:web:bb62acd7337b5dc5264b71",
+            measurementId: "G-2VP1L3004C"
+        };
+
+        // Initialize Firebase
+        let db, auth, userUid;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch(e) {
+            console.warn("Firebase not configured. Running in Offline Mode.");
+        }
+
+        /**
+         * STORAGE SERVICE (Cloud + Local Hybrid)
+         */
+        class StorageService {
+            static async init() {
+                if (!auth) return false;
+                
+                return new Promise((resolve) => {
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                            userUid = user.uid;
+                            console.log("Logged in as:", userUid);
+                            await this.pullFromCloud(); // Sync on load
+                            resolve(true);
+                        } else {
+                            await signInAnonymously(auth); // Triggers listener again
+                        }
+                    });
+                });
+            }
+
+            // Download Cloud Data -> LocalStorage (Cloud is Truth)
+            static async pullFromCloud() {
+                if (!db || !userUid) return;
+                try {
+                    const docRef = doc(db, "users", userUid);
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        console.log("Cloud Save Found. Syncing...");
+                        
+                        // Map Cloud keys back to LocalStorage
+                        Object.keys(data).forEach(key => {
+                            if (key !== 'lastSynced' && key !== 'userId') {
+                                const val = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
+                                localStorage.setItem(key, val);
+                            }
+                        });
+                        return true;
+                    } else {
+                        console.log("New Cloud User. Uploading local data...");
+                        await this.pushToCloud(); // Create initial doc
+                    }
+                } catch (e) {
+                    console.error("Cloud Pull Failed:", e);
+                }
+            }
+
+            // Upload LocalStorage -> Cloud Data
+            static async pushToCloud() {
+                if (!db || !userUid) return;
+                
+                const payload = {
+                    userId: userUid,
+                    lastSynced: serverTimestamp(),
+                    // Core Stats
+                    poker_bankroll: parseFloat(this.get('poker_bankroll', 1000)),
+                    poker_xp: parseInt(this.get('poker_xp', 0)),
+                    poker_total_hands: parseInt(this.get('poker_total_hands', 0)),
+                    poker_player_name: this.get('poker_player_name', 'Grinder'),
+                    poker_campaign_level: parseInt(this.get('poker_campaign_level', 0)),
+                    // Complex Objects (Parse before sending to keep them as objects in DB)
+                    poker_hand_stats: JSON.parse(this.get('poker_hand_stats', '{}')),
+                    poker_inventory: JSON.parse(this.get('poker_inventory', '[]')),
+                    poker_equipped: JSON.parse(this.get('poker_equipped', '{}')),
+                    poker_custom_range: JSON.parse(this.get('poker_custom_range', '[]'))
+                };
+
+                // Add Save Slots
+                for(let i=1; i<=3; i++) {
+                    const slot = this.get(`poker_save_slot_${i}`, null);
+                    if(slot) payload[`poker_save_slot_${i}`] = JSON.parse(slot);
+                }
+
+                try {
+                    await setDoc(doc(db, "users", userUid), payload, { merge: true });
+                    console.log("Cloud Sync Complete");
+                } catch(e) {
+                    console.warn("Cloud Push Failed:", e);
+                }
+            }
+
+            static get(key, defaultValue) {
+                try {
+                    const val = localStorage.getItem(key);
+                    return val ? val : defaultValue;
+                } catch (e) { return defaultValue; }
+            }
+
+            static set(key, value) {
+                try {
+                    localStorage.setItem(key, value);
+                    this.debounceCloudSave(); // Trigger background sync
+                    return true;
+                } catch (e) { return false; }
+            }
+
+            static remove(key) { try { localStorage.removeItem(key); } catch(e) {} }
+            
+            // Prevent hammering Firestore on every click
+            static debounceCloudSave() {
+                if (this.saveTimer) clearTimeout(this.saveTimer);
+                this.saveTimer = setTimeout(() => {
+                    this.pushToCloud();
+                }, 2000); // Wait for 2 seconds of inactivity
+            }
+
+            static isAvailable() {
+                try { const test = '__storage_test__'; localStorage.setItem(test, test); localStorage.removeItem(test); return true; } 
+                catch (e) { return false; }
+            }
+        }
+
+        /**
+         * AUDIO MANAGER
+         */
+        class AudioManager {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true; 
+                this.volume = 0.3;
+            }
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+            resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
+            toggle() {
+                this.enabled = !this.enabled;
+                if (this.enabled) { this.init(); this.resume(); this.playTone(800, 'sine', 0.1); }
+                return this.enabled;
+            }
+            playTone(freq, type, duration, time = 0) {
+                if (!this.enabled || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime + time);
+                gain.gain.setValueAtTime(this.volume, this.ctx.currentTime + time);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + time + duration);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(this.ctx.currentTime + time); osc.stop(this.ctx.currentTime + time + duration);
+            }
+            playNoise(duration) {
+                if (!this.enabled || !this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                const noise = this.ctx.createBufferSource(); noise.buffer = buffer;
+                const gain = this.ctx.createGain(); const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass'; filter.frequency.value = 1000;
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime); gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination); noise.start();
+            }
+            playSuccess() { this.playTone(523.25, 'sine', 0.3, 0); this.playTone(659.25, 'sine', 0.3, 0.1); this.playTone(783.99, 'sine', 0.6, 0.2); }
+            playError() { this.playTone(150, 'sawtooth', 0.3, 0); this.playTone(130, 'sawtooth', 0.3, 0.1); }
+            playChip() { this.playTone(2000, 'triangle', 0.05, 0); this.playTone(2500, 'sine', 0.05, 0); }
+            playDeal() { this.playNoise(0.15); }
+            playBuy() { this.playTone(1200, 'square', 0.1, 0); this.playTone(1600, 'square', 0.2, 0.1); }
+        }
+
+        /**
+         * SHOP DATA
+         */
+        const SHOP_ITEMS = {
+            protectors: [
+                { id: 'prot_none', name: 'None', price: 0, icon: '', color: '' },
+                { id: 'prot_chip', name: 'Lucky Chip', price: 500, icon: 'ph-poker-chip', color: 'text-red-500' },
+                { id: 'prot_spade', name: 'Golden Spade', price: 2000, icon: 'ph-spade', color: 'text-yellow-400' },
+                { id: 'prot_skull', name: 'Dead Man\'s Hand', price: 5000, icon: 'ph-skull', color: 'text-slate-300' },
+                { id: 'prot_8ball', name: 'The 8-Ball', price: 7500, icon: 'ph-number-circle-eight', color: 'text-white' },
+                { id: 'prot_crown', name: 'Golden Crown', price: 10000, icon: 'ph-crown', color: 'text-yellow-400' },
+                { id: 'prot_dice', name: 'High Roller Dice', price: 15000, icon: 'ph-dice-five', color: 'text-emerald-400' },
+                { id: 'prot_diamond', name: 'Blue Diamond', price: 25000, icon: 'ph-diamond', color: 'text-blue-400' },
+            ],
+            felts: [
+                { id: 'felt_emerald', name: 'Classic Emerald', price: 0, colors: ['#064e3b', '#022c22'] },
+                { id: 'felt_royal', name: 'Royal Blue', price: 1000, colors: ['#1e3a8a', '#172554'] },
+                { id: 'felt_crimson', name: 'Crimson Red', price: 2500, colors: ['#7f1d1d', '#450a0a'] },
+                { id: 'felt_concrete', name: 'Underground', price: 5000, colors: ['#374151', '#111827'] },
+                { id: 'felt_purple', name: 'Purple Haze', price: 7500, colors: ['#4c1d95', '#1e1b4b'] },
+                { id: 'felt_sunset', name: 'Sunset Strip', price: 8000, colors: ['#be123c', '#431407'] },
+                { id: 'felt_void', name: 'Void Black', price: 10000, colors: ['#000000', '#0f172a'] }
+            ],
+            decks: [
+                { id: 'deck_standard', name: 'Standard White', price: 0, bg: '#ffffff', bgGrad: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', border: 'rgba(0,0,0,0.1)', text: 'default' },
+                { id: 'deck_midnight', name: 'Midnight Black', price: 2000, bg: '#1e293b', bgGrad: 'linear-gradient(135deg, #334155 0%, #1e293b 100%)', border: 'rgba(255,255,255,0.1)', text: 'white' },
+                { id: 'deck_ruby', name: 'Ruby Luxury', price: 5000, bg: '#7f1d1d', bgGrad: 'linear-gradient(135deg, #991b1b 0%, #450a0a 100%)', border: '#fca5a5', text: 'white' },
+                { id: 'deck_stealth', name: 'Stealth Ops', price: 6000, bg: '#3f3f46', bgGrad: 'linear-gradient(135deg, #52525b 0%, #27272a 100%)', border: '#18181b', text: 'white' },
+                { id: 'deck_gold', name: 'Luxury Gold', price: 7500, bg: '#fef3c7', bgGrad: 'linear-gradient(135deg, #fef3c7 0%, #d97706 100%)', border: '#b45309', text: 'dark' },
+                { id: 'deck_cyber', name: 'Neon Cyber', price: 15000, bg: '#18181b', bgGrad: 'linear-gradient(135deg, #27272a 0%, #09090b 100%)', border: '#ec4899', text: 'cyber' }
+            ]
+        };
+
+        const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+        const RANK_ORDER = { '2':0, '3':1, '4':2, '5':3, '6':4, '7':5, '8':6, '9':7, 'T':8, 'J':9, 'Q':10, 'K':11, 'A':12 };
+        const SUITS = ['s', 'h', 'd', 'c'];
+        const POSITIONS_6MAX = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB'];
+        const POSITIONS_9MAX = ['UTG', 'UTG+1', 'UTG+2', 'LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'];
+
+        const RANGES = {
+            CASH_6MAX: {
+                RFI: {
+                    'UTG': { raise: ["66+", "A2s+", "K9s+", "Q9s+", "J9s+", "T9s", "98s", "87s", "ATo+", "KJo+", "QJo"] },
+                    'HJ':  { raise: ["44+", "A2s+", "K9s+", "Q9s+", "J9s+", "T9s", "98s", "87s", "76s", "ATo+", "KJo+", "QJo", "JTo"] },
+                    'CO':  { raise: ["22+", "A2s+", "K8s+", "Q9s+", "J8s+", "T8s+", "98s", "87s", "76s", "65s", "54s", "A8o+", "KTo+", "QTo+", "JTo", "T9o"] },
+                    'BTN': { raise: ["22+", "A2s+", "K2s+", "Q4s+", "J6s+", "T7s+", "97s+", "86s+", "75s+", "65s", "54s", "A2o+", "K8o+", "Q9o+", "J9o+", "T9o", "98o"] },
+                    'SB':  { raise: ["22+", "A2s+", "K2s+", "Q4s+", "J6s+", "T7s+", "97s+", "87s", "76s", "65s", "A2o+", "K8o+", "Q9o+", "J9o+", "T9o", "98o"] },
+                    'BB': { raise: [] }
+                },
+                DEFENSE: {
+                     'BB_vs_UTG': { raise: ["QQ+", "AKs", "AKo", "A2s-A5s"], call: ["22-JJ", "A6s-AQs", "K9s-KQs", "Q9s-QJs", "J9s-JTs", "T8s-T9s", "98s", "87s", "76s", "65s", "ATo-AQo", "KJo-KQo", "QJo"] },
+                    'BB_vs_HJ': { raise: ["JJ+", "AQs+", "AKo", "A2s-A5s", "K9s", "T9s", "98s"], call: ["22-TT", "A6s-AJs", "K9s-KJs", "Q9s-QJs", "J8s+", "T8s", "87s", "76s", "65s", "54s", "ATo-AQo", "KJo-KQo", "QJo", "JTo"] },
+                    'BB_vs_CO': { raise: ["TT+", "AJs+", "AQo+", "A2s-A5s", "K9s", "Q9s", "J9s", "T9s", "98s", "87s"], call: ["22-99", "A6s-ATs", "K5s-KTs", "Q5s-QTs", "J7s+", "T7s+", "76s", "65s", "54s", "43s", "A8o-AJo", "KTo-KQo", "QTo-QJo", "JTo"] },
+                    'BB_vs_BTN': { raise: ["TT+", "AJs+", "KQs", "AQo+", "A2s-A5s", "K9s", "Q9s", "J9s", "T8s+", "98s", "87s", "76s"], call: ["22-99", "A6s-ATs", "K2s-KJs", "Q2s-QJs", "J5s+", "T6s", "96s+", "86s", "65s", "54s", "43s", "A2o-AJo", "K8o-KQo", "Q8o-QJo", "J8o-JTo", "T8o+", "98o"] },
+                    'BB_vs_SB': { raise: ["99+", "ATs+", "KJs+", "QJs", "AJo+", "KQo", "KJo"], call: ["22-88", "A2s-A9s", "K2s-KTs", "Q2s-QTs", "J4s+", "T6s+", "96s+", "85s+", "75s+", "64s+", "53s+", "43s", "A2o-AJo", "K2o-KTo", "Q4o-QTo", "J7o-JTo", "T7o-T9o", "97o+", "87o"] }
+                }
+            },
+            MTT_9MAX: {
+                 RFI: {
+                    'UTG': { raise: ["77+", "AJs+", "KQs", "AQo+"] }, 'UTG+1': { raise: ["77+", "ATs+", "KJs+", "AQo+"] }, 'UTG+2': { raise: ["66+", "ATs+", "KJs+", "QJs", "AQo+"] }, 'LJ': { raise: ["55+", "A9s+", "KTs+", "QTs+", "JTs", "AJo+", "KQo"] }, 'HJ': { raise: ["44+", "A5s+", "K9s+", "Q9s+", "J9s+", "T9s", "ATo+", "KJo+", "QJo"] },
+                    'CO': { raise: ["22+", "A2s+", "K6s+", "Q8s+", "J8s+", "T8s+", "98s", "87s", "A9o+", "KTo+", "QTo+", "JTo"] }, 'BTN': { raise: ["22+", "A2s+", "K2s+", "Q5s+", "J7s+", "T7s+", "97s+", "87s", "76s", "65s", "A2o+", "K7o+", "Q9o+", "J9o+", "T9o"] }, 'SB': { raise: ["22+", "A2s+", "K4s+", "Q6s+", "J8s+", "T8s+", "98s", "87s", "A7o+", "K9o+", "Q9o+", "J9o+"] }, 'BB': { raise: [] }
+                 }
+            }
+        };
+        
+        const LEVELS = [
+            { name: "Micro Fish", xp: 0 }, { name: "Table Captain", xp: 500 }, { name: "Grinder", xp: 1500 }, { name: "Shark", xp: 3000 }, { name: "GTO Wizard", xp: 6000 }, { name: "End Boss", xp: 10000 }
+        ];
+
+        const CAMPAIGN_LEVELS = [
+             { name: "The Rock", desc: "Early Position Discipline", target: 7, bonus: 500, config: { type: 'RFI', allowedPos: ['UTG', 'HJ'] } },
+             { name: "The Thief", desc: "Steal the Blinds", target: 7, bonus: 1000, config: { type: 'RFI', allowedPos: ['CO', 'BTN'] } },
+             { name: "Blind War", desc: "Small Blind Aggression", target: 7, bonus: 2000, config: { type: 'RFI', allowedPos: ['SB'] } },
+             { name: "The Defender", desc: "Defend the Big Blind", target: 7, bonus: 5000, config: { type: 'DEFENSE', allowedPos: ['BB'] } },
+             { name: "GTO Master", desc: "Total Mastery", target: 99999, bonus: 0, config: { type: 'MIXED', allowedPos: [] } }
+        ];
+
+        /**
+         * CORE APP CLASS
+         */
+        class HoldemTrainer {
+            constructor() {
+                this.audio = new AudioManager();
+                
+                // Default state (will be overwritten by sync if available)
+                this.bankroll = 1000;
+                this.xp = 0;
+                this.totalHands = 0;
+                this.playerName = '';
+                this.campaignLevelIndex = 0;
+                this.handStats = {};
+                this.inventory = ["felt_emerald", "deck_standard", "prot_none"];
+                this.equipped = {felt: "felt_emerald", deck: "deck_standard", protector: "prot_none"};
+                this.customRange = ["AA","KK","QQ","JJ","TT","99","88","77","AKs","AQs","AJs","ATs","KQs","KJs","QJs","JTs","T9s","98s","87s","AKo","AQo"];
+
+                this.streak = 0;
+                this.campaignStreak = 0;
+                this.mode = 'rfi'; 
+                this.timer = null;
+                this.timeLeft = 100;
+                this.currentHand = null;
+                this.currentScenario = null;
+                this.isModalOpen = false;
+                this.isPlaying = false;
+                this.isPaused = false;
+                this.wasAutoPaused = false;
+                this.isAdaptive = false; 
+                this.touchStartX = 0; this.touchStartY = 0; this.isDragging = false; this.cardContainer = null; this.hideOverlayTimer = null;
+
+                this.init();
+            }
+
+            async init() {
+                // 1. Try to Init Cloud
+                if (firebaseConfig.apiKey !== "PASTE_API_KEY_HERE") {
+                    console.log("Connecting to Cloud...");
+                    await StorageService.init(); 
+                }
+
+                // 2. Load Data (From LocalStorage, which might have just been synced)
+                this.loadLocalState();
+
+                // 3. Bind & Start
+                this.bindEvents();
+                this.bindInputEvents(); 
+                document.getElementById('modeSelect').value = this.mode;
+                this.updateModeUI(); 
+                
+                if(this.customRange.length > 0 && document.getElementById('customRangeInput')) {
+                    document.getElementById('customRangeInput').value = this.customRange.join(', ');
+                }
+                
+                this.applyTheme(); 
+                this.updateGamificationUI();
+                this.isPaused = false;
+                
+                if (this.playerName) {
+                    document.getElementById('splashScreen').classList.add('hidden');
+                    this.isPlaying = true;
+                    this.nextHand();
+                } else {
+                    this.isPlaying = false;
+                }
+
+                if(!StorageService.isAvailable()) { setTimeout(() => { this.showToast("WARNING: STORAGE BLOCKED. USE FILE EXPORT.", "error"); }, 1000); }
+            }
+
+            loadLocalState() {
+                this.bankroll = parseFloat(StorageService.get('poker_bankroll', '1000'));
+                this.xp = parseInt(StorageService.get('poker_xp', '0'));
+                this.totalHands = parseInt(StorageService.get('poker_total_hands', '0'));
+                this.playerName = StorageService.get('poker_player_name', '');
+                this.campaignLevelIndex = parseInt(StorageService.get('poker_campaign_level', '0'));
+                this.handStats = JSON.parse(StorageService.get('poker_hand_stats', '{}'));
+                this.inventory = JSON.parse(StorageService.get('poker_inventory', '["felt_emerald", "deck_standard", "prot_none"]'));
+                this.equipped = JSON.parse(StorageService.get('poker_equipped', '{"felt": "felt_emerald", "deck": "deck_standard", "protector": "prot_none"}'));
+                
+                const rangeStr = StorageService.get('poker_custom_range', null);
+                if (rangeStr) this.customRange = JSON.parse(rangeStr);
+            }
+            
+            startGame() {
+                const name = "Grinder";
+                this.playerName = name;
+                StorageService.set('poker_player_name', name);
+                
+                document.getElementById('splashScreen').classList.add('opacity-0');
+                setTimeout(() => {
+                    document.getElementById('splashScreen').classList.add('hidden');
+                    this.audio.init();
+                    this.audio.resume();
+                    this.nextHand();
+                }, 500);
+            }
+
+            updateModeUI() {
+                const editBtn = document.getElementById('editRangeBtn');
+                if(this.mode === 'custom') { editBtn.classList.remove('hidden'); } else { editBtn.classList.add('hidden'); }
+            }
+
+            triggerHaptic(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
+            togglePause(silent = false) {
+                if (!this.isPlaying && !this.isPaused) return;
+                this.isPaused = !this.isPaused;
+                const modal = document.getElementById('pauseModal');
+                if (this.isPaused) { this.stopTimer(); if (!silent) { modal.classList.remove('hidden'); modal.classList.add('flex'); } } 
+                else { this.startTimer(false); modal.classList.add('hidden'); modal.classList.remove('flex'); }
+            }
+            exitToMenu() { this.isPlaying = false; this.isPaused = false; this.stopTimer(); StorageService.remove('poker_player_name'); document.getElementById('pauseModal').classList.add('hidden'); document.getElementById('pauseModal').classList.remove('flex'); location.reload(); }
+            
+            // ---------------- PERSISTENCE METHODS (RESTORED) ----------------
+            
+            saveProgress() {
+                StorageService.set('poker_bankroll', this.bankroll);
+                StorageService.set('poker_xp', this.xp);
+                StorageService.set('poker_total_hands', this.totalHands);
+                StorageService.set('poker_inventory', JSON.stringify(this.inventory));
+                StorageService.set('poker_equipped', JSON.stringify(this.equipped));
+                StorageService.set('poker_hand_stats', JSON.stringify(this.handStats));
+                if(this.playerName) StorageService.set('poker_player_name', this.playerName);
+                StorageService.set('poker_campaign_level', this.campaignLevelIndex);
+                StorageService.set('poker_custom_range', JSON.stringify(this.customRange));
+                // triggerHaptic not strictly needed here but good for feedback if manual
+            }
+
+            showToast(message, type = 'info') {
+                const container = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                let bgClass = type === 'error' ? 'bg-red-600' : 'bg-emerald-600';
+                let icon = type === 'error' ? 'ph-warning-circle' : 'ph-check-circle';
+                toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 min-w-[200px] transform transition-all duration-300 toast-enter`;
+                toast.innerHTML = `<i class="ph-bold ${icon} text-xl"></i><span class="text-xs font-bold uppercase tracking-wider">${message}</span>`;
+                container.appendChild(toast);
+                requestAnimationFrame(() => { toast.classList.remove('toast-enter'); toast.classList.add('toast-enter-active'); });
+                setTimeout(() => { toast.classList.remove('toast-enter-active'); toast.classList.add('toast-exit-active'); setTimeout(() => toast.remove(), 300); }, 3000);
+            }
+
+            getSaveState() {
+                const data = {
+                    bankroll: this.bankroll,
+                    xp: this.xp,
+                    totalHands: this.totalHands,
+                    inventory: this.inventory,
+                    equipped: this.equipped,
+                    handStats: this.handStats,
+                    playerName: this.playerName,
+                    campaignLevel: this.campaignLevelIndex,
+                    customRange: this.customRange,
+                    timestamp: new Date().toISOString()
+                };
+                for(let i=1; i<=3; i++) {
+                    const slot = StorageService.get(`poker_save_slot_${i}`, null);
+                    if(slot) data[`slot_${i}`] = JSON.parse(slot);
+                }
+                return JSON.stringify(data);
+            }
+
+            prepareExport() {
+                const boxContainer = document.getElementById('syncBoxContainer');
+                const box = document.getElementById('syncStringInput');
+                const btn = document.getElementById('syncActionBtn');
+                boxContainer.classList.remove('hidden');
+                const saveString = btoa(this.getSaveState());
+                box.value = saveString;
+                box.select();
+                btn.textContent = "COPY TO CLIPBOARD";
+                btn.className = "w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-3 rounded-lg shadow-lg mt-2";
+                btn.onclick = () => {
+                    box.select();
+                    try {
+                        document.execCommand('copy');
+                        this.showToast("COPIED TO CLIPBOARD!");
+                    } catch(e) {
+                        this.showToast("COPY FAILED - COPY MANUALLY", "error");
+                    }
+                };
+            }
+
+            exportSaveToFile(slotIndex = null) {
+                let dataStr = "";
+                let fileName = "rsdp_gto_save.json";
+                if (slotIndex) {
+                    const slotData = StorageService.get(`poker_save_slot_${slotIndex}`, null);
+                    if (!slotData) { this.showToast("EMPTY SLOT", "error"); return; }
+                    dataStr = slotData;
+                    fileName = `rsdp_gto_slot${slotIndex}.json`;
+                } else { dataStr = this.getSaveState(); }
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob); const a = document.createElement('a');
+                a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                this.showToast("SAVE FILE DOWNLOADED!");
+            }
+
+            triggerFileImport() { document.getElementById('fileImportInput').click(); }
+            
+            importSaveFromFile(input) {
+                const file = input.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const json = e.target.result;
+                        const data = JSON.parse(json);
+                        if (data.slot_1 || data.slot_2 || data.slot_3) { this.applySaveData(data); } else { this.applySaveData(data); }
+                        input.value = ''; 
+                    } catch (err) { console.error(err); this.showToast("INVALID SAVE FILE", "error"); }
+                };
+                reader.readAsText(file);
+            }
+
+            applySaveData(data) {
+                if(typeof data.bankroll === 'undefined') throw new Error("Invalid Data");
+                StorageService.set('poker_bankroll', data.bankroll); StorageService.set('poker_xp', data.xp); StorageService.set('poker_total_hands', data.totalHands);
+                StorageService.set('poker_inventory', JSON.stringify(data.inventory)); StorageService.set('poker_equipped', JSON.stringify(data.equipped));
+                StorageService.set('poker_hand_stats', JSON.stringify(data.handStats)); if (data.playerName) StorageService.set('poker_player_name', data.playerName);
+                StorageService.set('poker_campaign_level', data.campaignLevel); if (data.customRange) StorageService.set('poker_custom_range', JSON.stringify(data.customRange));
+                for(let i=1; i<=3; i++) { if(data[`slot_${i}`]) StorageService.set(`poker_save_slot_${i}`, JSON.stringify(data[`slot_${i}`])); }
+                this.showToast("DATA LOADED! RESTARTING..."); setTimeout(() => location.reload(), 1000);
+            }
+
+            saveGame(slotIndex, slotName) {
+                const name = slotName || (this.playerName || "Grinder");
+                const data = {
+                    bankroll: this.bankroll, xp: this.xp, totalHands: this.totalHands, inventory: this.inventory, equipped: this.equipped, handStats: this.handStats, playerName: name, timestamp: new Date().toISOString()
+                };
+                StorageService.set(`poker_save_slot_${slotIndex}`, JSON.stringify(data)); this.triggerHaptic(20); this.renderSaveSlots(); this.triggerConfetti(); this.showToast(`SAVED TO SLOT ${slotIndex}`);
+            }
+
+            initiateSave(slotIndex, overwrite = false) {
+                const nameInput = document.getElementById(`slot-name-${slotIndex}`); let name = this.playerName;
+                if (nameInput && nameInput.value.trim() !== "") name = nameInput.value.trim();
+                this.saveGame(slotIndex, name);
+            }
+
+            renderSaveSlots() {
+                const container = document.getElementById('saveSlotContainer'); container.innerHTML = '';
+                for (let i = 1; i <= 3; i++) {
+                    const slotKey = `poker_save_slot_${i}`; const savedData = StorageService.get(slotKey, null); let content = '';
+                    if (savedData) {
+                        try {
+                            const data = JSON.parse(savedData); const date = new Date(data.timestamp).toLocaleDateString(); const rank = this.getLevelData(data.xp).name; const saverName = data.playerName || "Unknown Grinder"; 
+                            content = `<div class="flex justify-between items-center mb-2"><div><div class="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2"><i class="ph-fill ph-floppy-disk text-purple-400"></i> SLOT ${i}</div><div class="text-xs font-bold text-emerald-400 mt-0.5">${saverName}</div><div class="text-[10px] text-slate-400 font-mono">${date} • ${rank}</div></div><div class="text-right"><div class="text-xs font-bold text-white">$${Math.floor(data.bankroll).toLocaleString()}</div></div></div><div class="flex gap-2 items-center"><button onclick="game.loadGame(${i})" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded transition-colors shadow-lg">LOAD</button><button onclick="game.initiateSave(${i}, true)" class="bg-slate-700 hover:bg-blue-600 text-white text-[10px] font-bold py-2 px-4 rounded transition-colors">UPDATE</button><button onclick="game.exportSaveToFile(${i})" class="bg-slate-800 hover:bg-slate-700 text-blue-400 p-2 rounded border border-white/10" title="Download Save File"><i class="ph-bold ph-download-simple"></i></button><button onclick="game.deleteSave(${i})" class="text-red-500 hover:text-red-400 p-2"><i class="ph-bold ph-trash"></i></button></div>`;
+                        } catch(e) { content = "Corrupt Slot"; }
+                    } else {
+                        content = `<div class="flex justify-between items-center mb-2"><div class="text-sm font-black text-slate-500 uppercase tracking-wider flex items-center gap-2"><i class="ph-bold ph-floppy-disk"></i> SLOT ${i}</div><div class="text-[10px] text-slate-600 font-bold uppercase">EMPTY</div></div><div class="flex gap-2"><input type="text" id="slot-name-${i}" placeholder="Profile Name" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-purple-500 placeholder-slate-600"><button onclick="game.initiateSave(${i})" class="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-2 rounded transition-colors shadow-lg">SAVE</button></div>`;
+                    }
+                    const slotDiv = document.createElement('div'); slotDiv.className = `save-slot p-4 rounded-xl bg-slate-900/50 border border-white/5 ${!savedData ? 'border-dashed border-slate-700' : ''}`; slotDiv.innerHTML = content; container.appendChild(slotDiv);
+                }
+            }
+
+            // ---------------- VISUAL RANGE EDITOR LOGIC ----------------
+            
+            openCustomRangeModal() {
+                if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; }
+                const modal = document.getElementById('customRangeModal');
+                this.explodeCustomRange();
+                this.renderRangeGrid();
+                this.updateRangeInputDisplay();
+                modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen = true;
+            }
+
+            explodeCustomRange() {
+                const explicitRange = [];
+                for (let i = 0; i < 13; i++) {
+                    for (let j = 0; j < 13; j++) {
+                        const r1 = RANKS[12-i], r2 = RANKS[12-j];
+                        let hand = '';
+                        if (i === j) hand = `${r1}${r2}`;
+                        else if (i < j) hand = `${r1}${r2}s`;
+                        else hand = `${r2}${r1}o`;
+                        if (this.checkAction(hand, this.customRange, 'raise')) { explicitRange.push(hand); }
+                    }
+                }
+                this.customRange = explicitRange;
+            }
+
+            renderRangeGrid() {
+                const grid = document.getElementById('rangeGrid');
+                grid.innerHTML = '';
+                for (let i = 0; i < 13; i++) {
+                    for (let j = 0; j < 13; j++) {
+                        const r1 = RANKS[12-i], r2 = RANKS[12-j];
+                        let handLabel = '', type = '';
+                        if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; }
+                        else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; }
+                        else { handLabel = `${r2}${r1}o`; type = 'o'; }
+                        const isSelected = this.customRange.includes(handLabel);
+                        const cell = document.createElement('div');
+                        cell.className = `range-cell cursor-pointer ${isSelected ? 'selected' : ''}`;
+                        cell.textContent = handLabel;
+                        cell.onclick = () => {
+                            if (this.customRange.includes(handLabel)) {
+                                this.customRange = this.customRange.filter(h => h !== handLabel);
+                                cell.classList.remove('selected');
+                            } else {
+                                this.customRange.push(handLabel);
+                                cell.classList.add('selected');
+                            }
+                            this.updateRangeInputDisplay();
+                        };
+                        grid.appendChild(cell);
+                    }
+                }
+            }
+            
+            rangeAction(action) {
+                if (action === 'clear') { this.customRange = []; } 
+                else if (action === 'fill') {
+                     this.customRange = [];
+                     for(let i=0;i<13;i++) for(let j=0;j<13;j++) {
+                        const r1 = RANKS[12-i], r2 = RANKS[12-j];
+                        if(i===j) this.customRange.push(`${r1}${r2}`);
+                        else if(i<j) this.customRange.push(`${r1}${r2}s`);
+                        else this.customRange.push(`${r2}${r1}o`);
+                     }
+                } else if (action === 'pairs') {
+                    for(let i=0;i<13;i++) {
+                        const h = `${RANKS[i]}${RANKS[i]}`;
+                        if(!this.customRange.includes(h)) this.customRange.push(h);
+                    }
+                } else if (action === 'suited') {
+                    for(let i=0;i<13;i++) for(let j=0;j<13;j++) {
+                         if(i<j) { const h = `${RANKS[12-i]}${RANKS[12-j]}s`; if(!this.customRange.includes(h)) this.customRange.push(h); }
+                    }
+                } else if (action === 'offsuit') {
+                     for(let i=0;i<13;i++) for(let j=0;j<13;j++) {
+                         if(i>j) { const h = `${RANKS[12-j]}${RANKS[12-i]}o`; if(!this.customRange.includes(h)) this.customRange.push(h); }
+                    }
+                } else if (action === 'broadway') {
+                     for(let i=0;i<13;i++) for(let j=0;j<13;j++) {
+                         const r1 = RANKS[12-i], r2 = RANKS[12-j];
+                         if("AKQJT".includes(r1) && "AKQJT".includes(r2)) {
+                              let h = '';
+                              if (i === j) h = `${r1}${r2}`;
+                              else if (i < j) h = `${r1}${r2}s`;
+                              else h = `${r2}${r1}o`;
+                              if(!this.customRange.includes(h)) this.customRange.push(h);
+                         }
+                     }
+                }
+                this.renderRangeGrid();
+                this.updateRangeInputDisplay();
+            }
+
+            loadGTOPreset(position) {
+                const preset = RANGES.CASH_6MAX.RFI[position];
+                if (!preset || !preset.raise) return;
+                const compactRange = preset.raise;
+                this.customRange = []; 
+                for(let i=0;i<13;i++) {
+                    for(let j=0;j<13;j++) {
+                        const r1 = RANKS[12-i], r2 = RANKS[12-j];
+                        let hand = '';
+                        if (i === j) hand = `${r1}${r2}`;
+                        else if (i < j) hand = `${r1}${r2}s`;
+                        else hand = `${r2}${r1}o`;
+                        if (this.checkAction(hand, compactRange, 'raise')) { this.customRange.push(hand); }
+                    }
+                }
+                this.renderRangeGrid();
+                this.updateRangeInputDisplay();
+                this.audio.playBuy(); 
+            }
+
+            updateRangeInputDisplay() {
+                const ta = document.getElementById('customRangeInput');
+                ta.value = this.customRange.join(', ');
+            }
+
+            closeCustomRangeModal() {
+                const modal = document.getElementById('customRangeModal');
+                modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen = false;
+                if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; }
+            }
+
+            saveCustomRange() {
+                StorageService.set('poker_custom_range', JSON.stringify(this.customRange));
+                this.closeCustomRangeModal();
+                this.streak = 0; 
+                this.updateGamificationUI();
+                this.nextHand(); 
+                this.audio.playSuccess();
+            }
+            
+            // ---------------- CORE GAME LOGIC ----------------
+
+            bindEvents() {
+                document.body.addEventListener('click', () => { this.audio.resume(); }, { once: true });
+                
+                document.getElementById('modeSelect').addEventListener('change', (e) => {
+                    this.mode = e.target.value;
+                    this.updateModeUI(); 
+                    this.streak = 0;
+                    this.campaignStreak = 0; 
+                    this.updateGamificationUI();
+                    this.nextHand();
+                });
+
+                const edgeToggle = document.getElementById('edgeCaseToggle');
+                edgeToggle.addEventListener('change', (e) => {
+                    this.isAdaptive = e.target.checked;
+                    this.updateGamificationUI();
+                    if(this.isPlaying && !this.isPaused) this.nextHand(); 
+                });
+                
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        if (this.isPaused && !this.isModalOpen) { this.togglePause(); return; }
+                        const feedback = document.getElementById('feedbackModal');
+                        if (!feedback.classList.contains('hidden')) { this.nextHand(); return; }
+                        if (this.isModalOpen) return;
+                        if (this.isPlaying || this.isPaused) { this.togglePause(); return; }
+                    }
+                    if (!this.isPlaying || this.isPaused) return; 
+                    const key = e.key.toLowerCase();
+                    if (key === 'f') this.handleInput('fold');
+                    if (key === 'c') this.handleInput('call');
+                    if (key === 'r') this.handleInput('raise');
+                });
+            }
+
+            bindInputEvents() {
+                this.cardContainer = document.getElementById('holeCardsArea'); this.cardContainer.style.cursor = 'grab'; this.cardContainer.style.touchAction = 'none'; 
+                this.cardContainer.addEventListener('touchstart', (e) => { this.handleDragStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+                this.cardContainer.addEventListener('touchmove', (e) => { if (e.cancelable) e.preventDefault(); this.handleDragMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+                this.cardContainer.addEventListener('touchend', (e) => { this.handleDragEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY); });
+                this.cardContainer.addEventListener('mousedown', (e) => { this.isDragging = true; this.cardContainer.style.cursor = 'grabbing'; document.body.classList.add('dragging'); this.handleDragStart(e.clientX, e.clientY); });
+                window.addEventListener('mousemove', (e) => { if (!this.isDragging) return; this.handleDragMove(e.clientX, e.clientY); });
+                window.addEventListener('mouseup', (e) => { if (!this.isDragging) return; this.isDragging = false; this.cardContainer.style.cursor = 'grab'; document.body.classList.remove('dragging'); this.handleDragEnd(e.clientX, e.clientY); });
+            }
+            handleDragStart(x, y) { if (!this.isPlaying || this.isPaused) return; this.touchStartX = x; this.touchStartY = y; this.triggerHaptic(10); const overlay = document.getElementById('swipeOverlay'); if(this.hideOverlayTimer) clearTimeout(this.hideOverlayTimer); overlay.classList.remove('hidden'); setTimeout(() => overlay.classList.remove('opacity-0'), 10); this.cardContainer.style.transition = 'none'; }
+            handleDragMove(x, y) { if (!this.isPlaying || this.isPaused) return; const deltaX = x - this.touchStartX; const deltaY = y - this.touchStartY; const rotate = deltaX * 0.05; this.cardContainer.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotate}deg)`; const hintRaise = document.getElementById('hintRaise'); const hintCall = document.getElementById('hintCall'); const hintFold = document.getElementById('hintFold'); const highlightThreshold = 80; hintRaise.style.opacity = '0.3'; hintRaise.style.transform = 'translateX(-50%) scale(0.9)'; hintCall.style.opacity = '0.3'; hintCall.style.transform = 'translateY(-50%) scale(0.9)'; hintFold.style.opacity = '0.3'; hintFold.style.transform = 'translateY(-50%) scale(0.9)'; if (Math.abs(deltaY) > Math.abs(deltaX)) { if (deltaY < -highlightThreshold) { hintRaise.style.opacity = '1'; hintRaise.style.transform = 'translateX(-50%) scale(1.2)'; } } else { if (deltaX > highlightThreshold) { hintCall.style.opacity = '1'; hintCall.style.transform = 'translateY(-50%) scale(1.2)'; } else if (deltaX < -highlightThreshold) { hintFold.style.opacity = '1'; hintFold.style.transform = 'translateY(-50%) scale(1.2)'; } } }
+            handleDragEnd(x, y) { if (!this.isPlaying || this.isPaused) return; const deltaX = x - this.touchStartX; const deltaY = y - this.touchStartY; const threshold = 80; const overlay = document.getElementById('swipeOverlay'); overlay.classList.add('opacity-0'); this.hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden'), 300); this.cardContainer.style.transition = 'transform 0.3s ease-out'; if (Math.abs(deltaY) > Math.abs(deltaX)) { if (deltaY < -threshold) { this.cardContainer.style.transform = `translate(0px, -${window.innerHeight}px)`; setTimeout(() => this.handleInput('raise'), 200); return; } } else { if (deltaX > threshold) { this.cardContainer.style.transform = `translate(${window.innerWidth}px, ${deltaY}px) rotate(45deg)`; setTimeout(() => this.handleInput('call'), 200); return; } else if (deltaX < -threshold) { this.cardContainer.style.transform = `translate(-${window.innerWidth}px, ${deltaY}px) rotate(-45deg)`; setTimeout(() => this.handleInput('fold'), 200); return; } } this.cardContainer.style.transform = 'translate(0px, 0px) rotate(0deg)'; }
+            toggleSound() { this.audio.toggle(); }
+            toggleSaves() { const modal = document.getElementById('saveModal'); const shop = document.getElementById('shopModal'); const stats = document.getElementById('statsModal'); const custom = document.getElementById('customRangeModal'); shop.classList.add('hidden'); shop.classList.remove('flex'); stats.classList.add('hidden'); stats.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderSaveSlots(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } } }
+            toggleStats() { const modal = document.getElementById('statsModal'); const shop = document.getElementById('shopModal'); const saves = document.getElementById('saveModal'); const custom = document.getElementById('customRangeModal'); shop.classList.add('hidden'); shop.classList.remove('flex'); saves.classList.add('hidden'); saves.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderStats(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } } }
+            toggleShop() { const modal = document.getElementById('shopModal'); const stats = document.getElementById('statsModal'); const saves = document.getElementById('saveModal'); const custom = document.getElementById('customRangeModal'); stats.classList.add('hidden'); stats.classList.remove('flex'); saves.classList.add('hidden'); saves.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderShop(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } } }
+            setupScenario() { if (this.mode === 'campaign') { const level = CAMPAIGN_LEVELS[this.campaignLevelIndex]; const config = level.config; if (config.type === 'RFI') { const pos = config.allowedPos[Math.floor(Math.random() * config.allowedPos.length)]; return { type: 'RFI', heroPos: pos, villainPos: null, villainAction: null, rangeKey: pos }; } else if (config.type === 'DEFENSE') { const pos = 'BB'; let vilPos; do { vilPos = POSITIONS_6MAX[Math.floor(Math.random() * 5)]; } while (vilPos === 'BB'); return { type: 'DEFENSE', heroPos: 'BB', villainPos: vilPos, villainAction: 'raise', rangeKey: `BB_vs_${vilPos}` }; } else { if (Math.random() > 0.4) { const posIdx = Math.floor(Math.random() * 5); return { type: 'RFI', heroPos: POSITIONS_6MAX[posIdx], villainPos: null, villainAction: null, rangeKey: POSITIONS_6MAX[posIdx] }; } else { const villainIdx = Math.floor(Math.random() * 5); return { type: 'DEFENSE', heroPos: 'BB', villainPos: POSITIONS_6MAX[villainIdx], villainAction: 'raise', rangeKey: `BB_vs_${POSITIONS_6MAX[villainIdx]}` }; } } } else if (this.mode === 'rfi') { const posIdx = Math.floor(Math.random() * 5); return { type: 'RFI', heroPos: POSITIONS_6MAX[posIdx], villainPos: null, villainAction: null, rangeKey: POSITIONS_6MAX[posIdx] }; } else if (this.mode === 'mtt_rfi') { const posIdx = Math.floor(Math.random() * 8); return { type: 'RFI', heroPos: POSITIONS_9MAX[posIdx], villainPos: null, villainAction: null, rangeKey: POSITIONS_9MAX[posIdx] }; } else if (this.mode === 'custom') { const posIdx = Math.floor(Math.random() * 5); return { type: 'CUSTOM', heroPos: POSITIONS_6MAX[posIdx], villainPos: null, villainAction: null }; } else { const villainIdx = Math.floor(Math.random() * 5); return { type: 'DEFENSE', heroPos: 'BB', villainPos: POSITIONS_6MAX[villainIdx], villainAction: 'raise', rangeKey: `BB_vs_${POSITIONS_6MAX[villainIdx]}` }; } }
+            updateGamificationUI() { document.getElementById('bankrollDisplay').textContent = Math.floor(this.bankroll).toLocaleString(); const desktopStreakEl = document.getElementById('desktopStreak'); if (desktopStreakEl) desktopStreakEl.textContent = this.streak; const levelInd = document.getElementById('levelIndicator'); const edgeLabel = document.getElementById('edgeCaseLabel'); const edgeInput = document.getElementById('edgeCaseToggle'); const adaptiveContainer = document.getElementById('adaptiveMeterContainer'); const adaptiveFill = document.getElementById('adaptiveHeatBar'); if (this.mode === 'rfi' || this.mode === 'def') { edgeLabel.classList.remove('opacity-50', 'pointer-events-none'); edgeInput.disabled = false; } else { edgeLabel.classList.add('opacity-50', 'pointer-events-none'); edgeInput.disabled = true; if(this.isAdaptive) { this.isAdaptive = false; edgeInput.checked = false; } } if ((this.mode === 'rfi' || this.mode === 'def') && this.isAdaptive) { adaptiveContainer.classList.remove('hidden'); adaptiveFill.className = "h-full transition-all duration-500"; if (this.streak === 0) { adaptiveFill.style.width = "0%"; } else if (this.streak >= 15) { adaptiveFill.style.width = "100%"; adaptiveFill.classList.add('bg-gradient-to-r', 'from-red-500', 'to-purple-600', 'heat-glow-high'); } else if (this.streak >= 5) { const percent = 33 + ((this.streak - 5) * 6); adaptiveFill.style.width = `${Math.min(95, percent)}%`; adaptiveFill.classList.add('bg-yellow-400', 'heat-glow-med'); } else { const percent = this.streak * 8; adaptiveFill.style.width = `${percent}%`; adaptiveFill.classList.add('bg-cyan-500', 'heat-glow-low'); } } else { adaptiveContainer.classList.add('hidden'); } if (this.mode === 'campaign') { const lvl = CAMPAIGN_LEVELS[this.campaignLevelIndex]; levelInd.classList.remove('hidden'); levelInd.textContent = `Lvl ${this.campaignLevelIndex + 1}: ${lvl.name} (${this.campaignStreak}/${lvl.target})`; levelInd.className = "hidden md:block text-[9px] font-mono text-yellow-400 font-bold uppercase tracking-wider bg-yellow-900/50 px-2 py-1 rounded border border-yellow-500/30"; } else { levelInd.className = "hidden md:block text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider bg-slate-800/50 px-2 py-1 rounded border border-white/5"; levelInd.textContent = this.mode === 'custom' ? "Custom Range" : "100BB Deep"; } const levelInfo = this.getCurrentLevel(); document.getElementById('rankTitle').textContent = levelInfo.data.name; document.getElementById('levelBadge').textContent = levelInfo.index; const progress = ((this.xp - levelInfo.data.xp) / (levelInfo.next ? (levelInfo.next.xp - levelInfo.data.xp) : levelInfo.data.xp)) * 100; document.getElementById('xpBar').style.width = `${Math.min(100, Math.max(0, progress))}%`; document.getElementById('xpText').textContent = `${Math.floor(this.xp)} / ${Math.floor(levelInfo.next ? levelInfo.next.xp : 'MAX')} XP`; document.getElementById('multiplierBadge').textContent = `${this.getMultiplier()}x`; document.getElementById('handCounter').textContent = `Hand #${this.totalHands + 1}`; }
+            handleInput(action) { if (this.isDragging) return; if (!this.isPlaying || this.isPaused) return; this.stopTimer(); this.isPlaying = false; this.triggerHaptic(15); if (action === 'fold') this.audio.playDeal(); if (action === 'call' || action === 'raise') this.audio.playChip(); const correctAction = this.getCorrectAction(); let isCorrect = (action === correctAction); if (action === 'timeout') isCorrect = false; this.totalHands++; const genericHand = this.getGenericHand(this.currentHand); if (!this.handStats[genericHand]) this.handStats[genericHand] = { w: 0, l: 0 }; this.previousHandData = { hand: this.currentHand, scenario: this.currentScenario, isCorrect: isCorrect, correctAction: correctAction, userAction: action }; let earnedCash = 0, earnedXp = 0; if (isCorrect) { this.triggerHaptic([50, 50, 50]); this.handStats[genericHand].w++; const baseCash = this.mode === 'def' ? 20 : 10; const baseXp = 25; this.streak++; if (this.mode === 'campaign') { this.campaignStreak++; const currentLvl = CAMPAIGN_LEVELS[this.campaignLevelIndex]; if (this.campaignStreak >= currentLvl.target && this.campaignLevelIndex < 4) { this.showLevelUp(currentLvl); this.campaignLevelIndex++; this.campaignStreak = 0; StorageService.set('poker_campaign_level', this.campaignLevelIndex); } } const multiplier = this.getMultiplier(); const timeBonus = this.timeLeft > 50 ? 1.5 : 1; earnedCash = Math.floor(baseCash * multiplier * timeBonus); earnedXp = Math.floor(baseXp * multiplier); this.bankroll += earnedCash; this.xp += earnedXp; if (this.streak % 5 === 0) this.triggerConfetti(); this.showFloatingText(earnedCash); setTimeout(() => this.audio.playSuccess(), 100); } else { this.triggerHaptic(300); this.handStats[genericHand].l++; this.streak = 0; if(this.mode === 'campaign') this.campaignStreak = 0; const penalty = 50; this.bankroll -= penalty; const xpPenalty = 25; this.xp = Math.max(0, this.xp - xpPenalty); this.showFloatingText(-penalty); setTimeout(() => this.audio.playError(), 100); } this.saveProgress(); this.updateGamificationUI(); this.flashResult(isCorrect, correctAction, earnedCash, earnedXp); this.autoNextTimer = setTimeout(() => { this.nextHand(); }, 1500); }
+            flashResult(isCorrect, correctAction, cash, xp) { const overlay = document.getElementById('flashOverlay'); const text = document.getElementById('flashText'); overlay.classList.remove('hidden'); text.classList.remove('scale-0'); text.classList.add('scale-100'); if (isCorrect) { text.innerHTML = `<span class="text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]">CORRECT</span>`; } else { const correctText = correctAction.toUpperCase(); text.innerHTML = `<span class="text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">MISTAKE</span><br><span class="text-2xl text-slate-300 mt-2 block">SHOULD ${correctText}</span>`; } setTimeout(() => { text.classList.remove('scale-100'); text.classList.add('scale-0'); setTimeout(() => { overlay.classList.add('hidden'); }, 300); }, 1200); }
+            reviewLastHand() { if (!this.previousHandData) return; if (this.autoNextTimer) clearTimeout(this.autoNextTimer); const { hand, scenario, isCorrect, correctAction, userAction } = this.previousHandData; const tempHand = this.currentHand; const tempScenario = this.currentScenario; this.currentHand = hand; this.currentScenario = scenario; this.showFeedback(isCorrect, correctAction, userAction, 0, 0); this.currentHand = tempHand; this.currentScenario = tempScenario; }
+            showLevelUp(level) { const modal = document.getElementById('levelUpModal'); const txt = document.getElementById('levelUpText'); const nextLvlName = CAMPAIGN_LEVELS[this.campaignLevelIndex + 1].name; txt.textContent = `You are now: ${nextLvlName}`; modal.classList.remove('hidden'); modal.classList.add('flex'); this.bankroll += level.bonus; this.audio.playSuccess(); this.triggerConfetti(); }
+            closeLevelUp() { document.getElementById('levelUpModal').classList.add('hidden'); document.getElementById('levelUpModal').classList.remove('flex'); }
+            getCorrectAction() { const generic = this.getGenericHand(this.currentHand); let rangeData; if (this.mode === 'custom') { if (this.checkAction(generic, this.customRange, 'raise')) return 'raise'; return 'fold'; } if (this.mode === 'rfi' || (this.mode === 'campaign' && this.currentScenario.type === 'RFI')) { rangeData = RANGES.CASH_6MAX.RFI[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; return 'fold'; } else if (this.mode === 'mtt_rfi') { rangeData = RANGES.MTT_9MAX.RFI[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; return 'fold'; } else { rangeData = RANGES.CASH_6MAX.DEFENSE[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; if (this.checkAction(generic, rangeData.call, 'call')) return 'call'; return 'fold'; } }
+            checkAction(genericHand, range, actionType) { if (!range) return false; const idx = (r) => RANK_ORDER[r]; const type = genericHand.length === 2 ? 'pair' : genericHand.slice(2); const r1 = genericHand[0], r2 = genericHand[1]; for (let token of range) { token = token.trim(); if (token === genericHand) return true; if (token.includes('+')) { const base = token.replace('+', ''); if (base.length === 2) { if (type === 'pair' && idx(r1) >= idx(base[0])) return true; } else { const baseType = base.slice(2), baseR1 = base[0], baseR2 = base[1]; if (type === baseType && r1 === baseR1 && idx(r2) >= idx(baseR2)) return true; } } if (token.includes('-')) { const [low, high] = token.split('-'); if (low.length === 2) { if (type === 'pair' && idx(r1) >= idx(low[0]) && idx(r1) <= idx(high[0])) return true; } else { const baseType = low.slice(2); if (type === baseType && r1 === low[0] && idx(r2) >= idx(low[1]) && idx(r2) <= idx(high[1])) return true; } } } return false; }
+            generateCard() { const r = RANKS[Math.floor(Math.random() * RANKS.length)]; const s = SUITS[Math.floor(Math.random() * SUITS.length)]; return { rank: r, suit: s }; }
+            generateHand() { let hand; while (true) { let c1 = this.generateCard(), c2 = this.generateCard(); while (c1.rank === c2.rank && c1.suit === c2.suit) { c2 = this.generateCard(); } if (RANK_ORDER[c1.rank] < RANK_ORDER[c2.rank]) hand = [c2, c1]; else hand = [c1, c2]; const generic = this.getGenericHand(hand); const type = this.getHandType(generic); if (this.mode === 'custom') break; if (this.mode !== 'rfi' && this.mode !== 'def') break; if (!this.isAdaptive) { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); break; } if (this.streak < 5) { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); break; } if (this.streak < 15) { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); if (type !== 'trash' && type !== 'monster') break; } else { if (type === 'marginal') { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.add('hard-mode-pulse'); break; } } } return hand; }
+            getGenericHand(cards) { const r1 = cards[0].rank, r2 = cards[1].rank; if (r1 === r2) return `${r1}${r2}`; const suited = cards[0].suit === cards[1].suit ? 's' : 'o'; return `${r1}${r2}${suited}`; }
+            getHandType(generic) { const r1 = generic[0]; const r2 = generic[1]; const type = generic.length === 2 ? 'pair' : generic.slice(2); if (type === 'pair' && 'TJQKA'.includes(r1)) return 'monster'; if (r1 === 'A' && 'KQJ'.includes(r2)) return 'monster'; if (r1 === 'K' && r2 === 'Q' && type === 's') return 'monster'; if (type === 'pair' && !'TJQKA'.includes(r1)) return 'marginal'; if (r1 === 'A' && type === 's' && !'KQJT'.includes(r2)) return 'marginal'; if (type === 's') { const i1 = RANK_ORDER[r1]; const i2 = RANK_ORDER[r2]; if ((i1 - i2) <= 2 && i1 >= 3 && i1 <= 10) return 'marginal'; } if (type === 'o') { if (r1 === 'A' && 'T987'.includes(r2) === false) return 'marginal'; if (r1 === 'K' && 'TJ'.includes(r2)) return 'marginal'; if (r1 === 'Q' && r2 === 'J') return 'marginal'; } return 'trash'; }
+            nextHand() { const feedback = document.getElementById('feedbackModal'); if (feedback) feedback.classList.add('hidden'); const shop = document.getElementById('shopModal'); if (shop) shop.classList.add('hidden'); const stats = document.getElementById('statsModal'); if (stats) stats.classList.add('hidden'); const save = document.getElementById('saveModal'); if (save) save.classList.add('hidden'); const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); if (this.cardContainer) { this.cardContainer.style.transition = 'none'; this.cardContainer.style.transform = 'translate(0px, 0px) rotate(0deg)'; } this.isModalOpen = false; this.isPlaying = true; this.isPaused = false; this.wasAutoPaused = false; this.currentHand = this.generateHand(); this.currentScenario = this.setupScenario(); this.drawUI(); this.audio.playDeal(); this.startTimer(true); }
+            startTimer(reset = true) { if (this.timer) clearInterval(this.timer); if (reset) this.timeLeft = 100; const bars = [document.getElementById('timerBar'), document.getElementById('desktopTimerBar')]; const updateBars = (colorClass, shadowClass) => { bars.forEach(bar => { if(!bar) return; bar.style.width = `${this.timeLeft}%`; bar.className = `h-full w-full transition-all duration-200 ${colorClass} ${shadowClass}`; }); }; if (reset) updateBars('bg-cyan-500', 'shadow-[0_0_10px_rgba(6,182,212,0.5)]'); this.timer = setInterval(() => { this.timeLeft -= 1; let color = 'bg-cyan-500'; let shadow = 'shadow-[0_0_10px_rgba(6,182,212,0.5)]'; if (this.timeLeft < 50) { color = 'bg-yellow-500'; shadow = 'shadow-[0_0_10px_rgba(234,179,8,0.5)]'; } if (this.timeLeft < 20) { color = 'bg-red-600'; shadow = 'shadow-[0_0_10px_rgba(220,38,38,0.5)]'; } updateBars(color, shadow); if (this.timeLeft <= 0) this.handleInput('timeout'); }, 150); }
+            stopTimer() { clearInterval(this.timer); }
+            drawUI() { document.getElementById('heroPosText').textContent = this.currentScenario.heroPos; const villainDisplay = document.getElementById('villainDisplay'); if (this.currentScenario.villainPos) { villainDisplay.classList.remove('hidden'); document.getElementById('villainPosText').textContent = this.currentScenario.villainPos; } else { villainDisplay.classList.add('hidden'); } const btnCall = document.getElementById('btnCall'); const desktopBtnCall = document.getElementById('desktopBtnCall'); const raiseLabel = document.getElementById('raiseLabel'); const raiseLabelDesktop = document.getElementById('raiseLabelDesktop'); if (this.currentScenario.type === 'RFI' || this.currentScenario.type === 'CUSTOM') { btnCall.classList.add('hidden'); btnCall.parentElement.classList.remove('grid-cols-3'); btnCall.parentElement.classList.add('grid-cols-2'); if (desktopBtnCall) desktopBtnCall.classList.add('hidden'); if (raiseLabel) raiseLabel.textContent = "RAISE"; if (raiseLabelDesktop) raiseLabelDesktop.textContent = "RAISE"; } else { btnCall.classList.remove('hidden'); btnCall.parentElement.classList.remove('grid-cols-2'); btnCall.parentElement.classList.add('grid-cols-3'); if (desktopBtnCall) desktopBtnCall.classList.remove('hidden'); if (raiseLabel) raiseLabel.textContent = "3-BET"; if (raiseLabelDesktop) raiseLabelDesktop.textContent = "3-BET"; } const area = document.getElementById('holeCardsArea'); area.innerHTML = ''; this.currentHand.forEach(card => area.innerHTML += this.createCardHTML(card)); }
+            createCardHTML(card) { let suitClass = '', suitIcon = ''; if (card.suit === 's') { suitClass = 'suit-s'; suitIcon = '♠'; } if (card.suit === 'h') { suitClass = 'suit-h'; suitIcon = '♥'; } if (card.suit === 'd') { suitClass = 'suit-d'; suitIcon = '♦'; } if (card.suit === 'c') { suitClass = 'suit-c'; suitIcon = '♣'; } return `<div class="w-28 h-36 md:w-40 md:h-56 card flex flex-col items-center justify-center relative animate-in zoom-in duration-300 slide-in-from-bottom-4"><div class="absolute top-2 left-2.5 text-2xl md:text-3xl font-black ${suitClass}">${card.rank}</div><div class="text-6xl md:text-7xl ${suitClass} drop-shadow-sm">${suitIcon}</div><div class="absolute bottom-2 right-2.5 text-2xl md:text-3xl font-black ${suitClass} rotate-180">${card.rank}</div></div>`; }
+            buyItem(itemId, price, type) { if (this.inventory.includes(itemId)) { this.equipped[type] = itemId; this.saveProgress(); this.applyTheme(); this.renderShop(); } else { if (this.bankroll >= price) { this.bankroll -= price; this.inventory.push(itemId); this.equipped[type] = itemId; this.audio.playBuy(); this.saveProgress(); this.applyTheme(); this.renderShop(); this.updateGamificationUI(); this.triggerConfetti(); } else { this.audio.playError(); this.showFloatingText("NOT ENOUGH CASH"); } } this.triggerHaptic(50); }
+            renderShop() { document.getElementById('shopBankroll').textContent = Math.floor(this.bankroll).toLocaleString(); const renderGrid = (items, type, containerId) => { const container = document.getElementById(containerId); container.innerHTML = ''; items.forEach(item => { const owned = this.inventory.includes(item.id); const equipped = this.equipped[type] === item.id; const locked = !owned && this.bankroll < item.price; let btnText = owned ? (equipped ? 'EQUIPPED' : 'EQUIP') : `$${item.price.toLocaleString()}`; let btnClass = owned ? (equipped ? 'bg-blue-600 text-white' : 'bg-slate-700 text-white hover:bg-slate-600') : (locked ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-500'); let previewStyle = '', previewContent = ''; if (type === 'felts') previewStyle = `background: radial-gradient(circle, ${item.colors[0]}, ${item.colors[1]})`; else if (type === 'decks') { previewStyle = `background: ${item.bgGrad}; border: 1px solid ${item.border}`; previewContent = '<div class="absolute inset-0 flex items-center justify-center text-2xl font-black opacity-50">♠</div>'; } else if (type === 'protectors') { previewStyle = 'background: #0f172a;'; previewContent = `<div class="absolute inset-0 flex items-center justify-center text-3xl ${item.color}"><i class="ph-fill ${item.icon}"></i></div>`; if (item.id === 'prot_none') previewContent = '<div class="absolute inset-0 flex items-center justify-center text-xs text-slate-500 uppercase font-bold">NONE</div>'; } const el = document.createElement('div'); el.className = `shop-item p-3 rounded-xl bg-slate-900/50 flex flex-col gap-3 ${equipped ? 'equipped' : ''} ${owned ? 'owned' : ''} ${locked ? 'locked' : ''}`; el.onclick = () => !locked ? this.buyItem(item.id, item.price, type.slice(0, -1)) : null; el.innerHTML = `<div class="h-16 w-full rounded-lg shadow-inner relative overflow-hidden flex items-center justify-center" style="${previewStyle}">${previewContent}</div><div class="flex justify-between items-center"><span class="text-xs font-bold text-slate-300 truncate mr-2">${item.name}</span><span class="text-[10px] font-bold px-2 py-1 rounded ${btnClass} whitespace-nowrap">${btnText}</span></div>`; container.appendChild(el); }); }; renderGrid(SHOP_ITEMS.protectors, 'protectors', 'shopProtectors'); renderGrid(SHOP_ITEMS.felts, 'felts', 'shopFelts'); renderGrid(SHOP_ITEMS.decks, 'decks', 'shopDecks'); }
+            applyTheme() { const r = document.querySelector(':root'); const felt = SHOP_ITEMS.felts.find(f => f.id === this.equipped.felt); if (felt) { r.style.setProperty('--felt-start', felt.colors[0]); r.style.setProperty('--felt-end', felt.colors[1]); } const deck = SHOP_ITEMS.decks.find(d => d.id === this.equipped.deck); if (deck) { r.style.setProperty('--card-bg', deck.bg); r.style.setProperty('--card-bg-gradient', deck.bgGrad); r.style.setProperty('--card-border', deck.border); if (deck.text === 'white' || deck.text === 'cyber') { r.style.setProperty('--card-spade', '#e2e8f0'); r.style.setProperty('--card-club', '#4ade80'); r.style.setProperty('--card-diamond', '#60a5fa'); } else { r.style.setProperty('--card-spade', '#020617'); r.style.setProperty('--card-club', '#15803d'); r.style.setProperty('--card-diamond', '#2563eb'); } } const prot = SHOP_ITEMS.protectors.find(p => p.id === this.equipped.protector); const protEl = document.getElementById('heroProtector'); if (prot && prot.id !== 'prot_none') { protEl.className = `absolute bottom-0 -right-12 w-10 h-10 animate-float z-20 filter drop-shadow-lg transition-all duration-500 flex items-center justify-center text-3xl ${prot.color}`; protEl.innerHTML = `<i class="ph-fill ${prot.icon}"></i>`; protEl.classList.remove('hidden'); } else { protEl.classList.add('hidden'); } }
+            getCurrentLevel() { for (let i = LEVELS.length - 1; i >= 0; i--) { if (this.xp >= LEVELS[i].xp) return { index: i + 1, data: LEVELS[i], next: LEVELS[i+1] }; } return { index: 1, data: LEVELS[0], next: LEVELS[1] }; }
+            getLevelData(xp) { for (let i = LEVELS.length - 1; i >= 0; i--) if (xp >= LEVELS[i].xp) return LEVELS[i]; return LEVELS[0]; }
+            getMultiplier() { return this.streak >= 10 ? 4 : (this.streak >= 5 ? 2 : 1); }
+            loadGame(slotIndex) { const savedData = StorageService.get(`poker_save_slot_${slotIndex}`, null); if (!savedData) return; const data = JSON.parse(savedData); this.applySaveData(data); }
+            deleteSave(slotIndex) { StorageService.remove(`poker_save_slot_${slotIndex}`); this.renderSaveSlots(); }
+            showFloatingText(amount, isXp = false) { const floatEl = document.getElementById('floatingProfit'); let text = '', classes = ''; if (isXp) { if (typeof amount === 'string') { floatEl.textContent = amount; floatEl.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl md:text-3xl font-black text-red-500 bg-slate-900/90 px-4 py-2 rounded-lg border border-red-500/50 shadow-xl animate-pop z-50 pointer-events-none whitespace-nowrap"; } return; } if (amount > 0) { text = `+$${amount}`; classes = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-emerald-400 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] stroke-black animate-pop z-50 pointer-events-none"; } else { text = `-$${Math.abs(amount)}`; classes = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-red-500 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] stroke-black animate-pop z-50 pointer-events-none"; } floatEl.textContent = text; floatEl.className = classes; setTimeout(() => { floatEl.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm opacity-0 pointer-events-none transition-opacity duration-200"; }, 1000); }
+            showFeedback(isCorrect, correctAction, userAction, earnedCash, earnedXp) { const modal = document.getElementById('feedbackModal'); const title = document.getElementById('feedbackTitle'); const sub = document.getElementById('feedbackSubtitle'); const handDisplay = document.getElementById('feedbackHand'); const rewardDetails = document.getElementById('rewardDetails'); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen = true; if (isCorrect) { title.textContent = "CORRECT!"; title.className = "text-4xl font-black italic uppercase tracking-tighter text-emerald-400 drop-shadow-lg neon-text-emerald"; rewardDetails.classList.remove('hidden'); rewardDetails.innerHTML = `<span class="text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]">+ $${earnedCash}</span><span class="text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]">+ ${earnedXp} XP</span>`; } else { title.textContent = "MISTAKE"; title.className = "text-4xl font-black italic uppercase tracking-tighter text-red-500 drop-shadow-lg"; rewardDetails.classList.add('hidden'); } const handStr = this.getGenericHand(this.currentHand); const pos = this.currentScenario.heroPos; const vil = this.currentScenario.villainPos ? `vs ${this.currentScenario.villainPos}` : ''; const actionText = correctAction === 'raise' ? (this.mode === 'def' ? '3-Bet' : 'Raise') : correctAction.charAt(0).toUpperCase() + correctAction.slice(1); sub.textContent = `${pos} should ${actionText} ${handStr} ${vil}`; const c1 = this.currentHand[0], c2 = this.currentHand[1]; const getColor = (s) => s === 'h' || s === 'd' ? 'text-red-500' : (s === 'c' ? 'text-emerald-500' : 'text-slate-800'); const getSuit = (s) => s === 's' ? '♠' : (s === 'h' ? '♥' : (s === 'd' ? '♦' : '♣')); handDisplay.innerHTML = `${c1.rank}<span class="${getColor(c1.suit)}">${getSuit(c1.suit)}</span>${c2.rank}<span class="${getColor(c2.suit)}">${getSuit(c2.suit)}</span>`; const callLegend = document.getElementById('feedbackLegendCall'); if (this.currentScenario.type === 'RFI' || this.currentScenario.type === 'CUSTOM') { callLegend.classList.add('hidden'); } else { callLegend.classList.remove('hidden'); } this.renderMatrix(); }
+            renderMatrix() { const grid = document.getElementById('matrixGrid'); grid.innerHTML = ''; const currentGeneric = this.getGenericHand(this.currentHand); let rangeData; if (this.mode === 'custom') { rangeData = { raise: this.customRange }; } else if (this.mode === 'rfi' || (this.mode === 'campaign' && this.currentScenario.type === 'RFI')) { rangeData = RANGES.CASH_6MAX.RFI[this.currentScenario.rangeKey]; } else if (this.mode === 'mtt_rfi') { rangeData = RANGES.MTT_9MAX.RFI[this.currentScenario.rangeKey]; } else { rangeData = RANGES.CASH_6MAX.DEFENSE[this.currentScenario.rangeKey]; } if (!rangeData) return; const info = document.getElementById('matrixInfo'); info.className = "mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 border border-white/5 info-box-transition"; info.innerHTML = "Hover for info"; for (let i = 0; i < 13; i++) { for (let j = 0; j < 13; j++) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; let handLabel = '', type = ''; if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; } else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; } else { handLabel = `${r2}${r1}o`; type = 'o'; } const genericCode = handLabel; let bgClass = 'bg-slate-800 text-slate-600 border-slate-700/50'; const isRaise = this.checkAction(genericCode, rangeData?.raise, 'raise'); const isCall = this.checkAction(genericCode, rangeData?.call, 'call'); if (isRaise) bgClass = 'bg-emerald-600 text-white border-emerald-500/50 shadow-inner'; else if (isCall) bgClass = 'bg-blue-600 text-white border-blue-500/50 shadow-inner'; if (genericCode === currentGeneric) bgClass += ' ring-2 ring-white z-10 animate-pulse-fast font-black shadow-[0_0_15px_rgba(255,255,255,0.5)] scale-110'; const cell = document.createElement('div'); cell.className = `matrix-cell ${bgClass}`; cell.onmouseenter = () => { let action = "Fold"; let boxClass = "mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest shadow-lg border info-box-transition "; if(isRaise) { action = "Raise"; boxClass += "bg-emerald-600 border-emerald-400 text-white"; } else if(isCall) { action = "Call"; boxClass += "bg-blue-600 border-blue-400 text-white"; } else { action = "Fold"; boxClass += "bg-slate-700 border-slate-500 text-slate-200"; } info.className = boxClass; info.innerHTML = `${handLabel}: ${action}`; }; grid.appendChild(cell); }} }
+            resetStats() { this.handStats = {}; this.saveProgress(); this.renderStats(); }
+            renderStats() { const grid = document.getElementById('statsGrid'); grid.innerHTML = ''; const detailEl = document.getElementById('selectedHandStats'); detailEl.className = "mt-2 bg-slate-900/80 p-3 rounded-lg w-[260px] border border-white/10 flex items-center justify-center h-12 info-box-transition text-xs font-bold text-slate-400"; detailEl.textContent = "Tap a cell for details"; for (let i = 0; i < 13; i++) { for (let j = 0; j < 13; j++) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; let handLabel = '', type = ''; if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; } else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; } else { handLabel = `${r2}${r1}o`; type = 'o'; } const stats = this.handStats[handLabel] || { w: 0, l: 0 }; const total = stats.w + stats.l; let bgClass = 'bg-slate-800/50 border-slate-700/30 hover:bg-slate-700'; let style = ''; if (total > 0) { const winRate = stats.w / total; const hue = Math.floor(winRate * 120); style = `background-color: hsl(${hue}, 70%, 35%); border-color: rgba(255,255,255,0.1);`; } const cell = document.createElement('div'); cell.className = `matrix-cell transition-colors duration-100 ${total === 0 ? bgClass : ''}`; if (style) cell.style = style; cell.onclick = () => { const rate = total > 0 ? Math.round((stats.w / total) * 100) : 0; let msg = "", boxClass = "mt-2 p-3 rounded-lg w-[260px] border flex items-center justify-center h-12 info-box-transition text-xs font-bold shadow-lg "; if (total === 0) { msg = "No Data"; boxClass += "bg-slate-800 border-slate-600 text-slate-400"; } else { if (rate < 50) { msg = `${handLabel} LEAK (${rate}%)`; boxClass += "bg-red-600 border-red-400 text-white"; } else if (rate > 80) { msg = `${handLabel} MASTERED (${rate}%)`; boxClass += "bg-emerald-600 border-emerald-400 text-white"; } else { msg = `${handLabel} OK (${rate}%)`; boxClass += "bg-yellow-600 border-yellow-400 text-white"; } } detailEl.innerHTML = msg; detailEl.className = boxClass; }; grid.appendChild(cell); }} }
+            triggerConfetti() { confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#6ee7b7', '#ffffff'], disableForReducedMotion: true }); }
+        }
+
+        // CHANGE 2: Attach game to window for HTML event handlers
+        window.game = new HoldemTrainer();
+    </script>
+</body>
+</html>
