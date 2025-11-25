@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RSDP GTO Trainer v1.9.2</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --felt-start: #064e3b; /* Default Emerald */
+            --felt-end: #022c22;
+            
+            /* Card Styles */
+            --card-bg: #ffffff;
+            --card-bg-gradient: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            --card-border: rgba(0,0,0,0.1);
+            
+            /* High Contrast 4-Color Deck Colors */
+            --card-spade: #020617;
+            --card-heart: #dc2626;
+            --card-club: #15803d;
+            --card-diamond: #2563eb;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+            overflow: hidden;
+            touch-action: none; 
+            background-image: radial-gradient(circle at top, #1e293b 0%, #0f172a 100%);
+        }
+        
+        body.dragging { cursor: grabbing !important; }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Dynamic Felt */
+        .poker-felt {
+            background: radial-gradient(circle at 50% 40%, var(--felt-start) 0%, var(--felt-end) 80%);
+            position: relative;
+            transition: background 0.5s ease, box-shadow 0.5s ease;
+        }
+        .poker-felt::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .poker-felt::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.6) 100%);
+            pointer-events: none;
+        }
+        
+        /* Hard Mode Pulse */
+        .hard-mode-pulse {
+            animation: hardPulse 2s infinite;
+        }
+        @keyframes hardPulse {
+            0% { box-shadow: inset 0 0 0 rgba(220, 38, 38, 0); }
+            50% { box-shadow: inset 0 0 50px rgba(220, 38, 38, 0.3); }
+            100% { box-shadow: inset 0 0 0 rgba(220, 38, 38, 0); }
+        }
+
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-modal {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Dynamic Cards */
+        .card {
+            background: var(--card-bg-gradient);
+            border-radius: 14px;
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.3),
+                0 2px 4px -1px rgba(0, 0, 0, 0.2),
+                inset 0 0 0 1px var(--card-border);
+            transform-style: preserve-3d;
+            /* Transition handled by JS for physics */
+        }
+        
+        .suit-s { color: var(--card-spade); }
+        .suit-h { color: var(--card-heart); }
+        .suit-c { color: var(--card-club); }
+        .suit-d { color: var(--card-diamond); }
+
+        /* Neon Glows */
+        .neon-text-emerald { text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .neon-border { box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+
+        /* Shop Items */
+        .shop-item {
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .shop-item:hover { border-color: rgba(255,255,255,0.3); transform: translateY(-2px); }
+        .shop-item.owned { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .shop-item.equipped { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); }
+        .shop-item.locked { opacity: 0.7; }
+
+        /* Save Slots */
+        .save-slot {
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .save-slot:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .save-slot.empty {
+            border-style: dashed;
+            opacity: 0.6;
+        }
+
+        .matrix-cell {
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(255,255,255,0.05);
+            cursor: pointer;
+        }
+        
+        /* Range Editor Cells */
+        .range-cell {
+            transition: all 0.1s;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            background: #1e293b;
+            border: 1px solid #334155;
+        }
+        .range-cell:hover { background: #334155; color: white; }
+        .range-cell.selected {
+            background: #059669;
+            border-color: #10b981;
+            color: white;
+            font-weight: bold;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+        }
+        
+        .info-box-transition { transition: all 0.2s ease; }
+
+        .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-4px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        /* Text Pop Animation */
+        .animate-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* Flash Overlay Animations */
+        .flash-in { animation: flashIn 0.2s ease-out forwards; }
+        .flash-out { animation: flashOut 0.2s ease-in forwards; }
+        
+        @keyframes flashIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1.0); opacity: 1; }
+        }
+        @keyframes flashOut {
+            0% { transform: scale(1.0); opacity: 1; }
+            100% { transform: scale(1.2); opacity: 0; }
+        }
+        
+        /* Toast Animation */
+        .toast-enter { transform: translateY(-100%); opacity: 0; }
+        .toast-enter-active { transform: translateY(0); opacity: 1; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .toast-exit { transform: translateY(0); opacity: 1; }
+        .toast-exit-active { transform: translateY(-100%); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        .timer-bar { transition: width 0.2s linear, background-color 0.3s; }
+        .xp-bar-fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Heat Meter */
+        .heat-meter-bar {
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s, box-shadow 0.5s;
+        }
+        .heat-glow-low { box-shadow: 0 0 5px #34d399; }
+        .heat-glow-med { box-shadow: 0 0 10px #fbbf24; }
+        .heat-glow-high { box-shadow: 0 0 15px #ef4444, 0 0 25px #a855f7; animation: pulse 1.5s infinite; }
+
+        /* Button Gradients */
+        .btn-fold { background: linear-gradient(to bottom, #374151, #1f2937); border-bottom: 4px solid #111827; }
+        .btn-fold:active { border-bottom-width: 0px; transform: translateY(4px); }
+        .btn-call { background: linear-gradient(to bottom, #3b82f6, #2563eb); border-bottom: 4px solid #1e40af; }
+        .btn-call:active { border-bottom-width: 0px; transform: translateY(4px); }
+        .btn-raise { background: linear-gradient(to bottom, #10b981, #059669); border-bottom: 4px solid #065f46; }
+        .btn-raise:active { border-bottom-width: 0px; transform: translateY(4px); }
+
+        /* Swipe Hints Animation */
+        .hint-pulse { animation: hintPulse 1.5s infinite; }
+        @keyframes hintPulse {
+            0%, 100% { transform: scale(1) translate(-50%, 0); opacity: 0.5; }
+            50% { transform: scale(1.1) translate(-50%, 0); opacity: 1; }
+        }
+        
+        /* Hidden file input for import */
+        #fileImportInput { display: none; }
+    </style>
+</head>
+<body class="h-[100dvh] w-screen flex flex-col overflow-hidden relative">
+
+    <!-- Hidden Input for JSON Upload -->
+    <input type="file" id="fileImportInput" accept=".json" onchange="game.importSaveFromFile(this)">
+
+    <!-- TOAST CONTAINER -->
+    <div id="toastContainer" class="fixed top-4 left-0 right-0 z-[120] flex flex-col items-center gap-2 pointer-events-none"></div>
+
+    <!-- SWIPE GUIDES (Visible on Drag) -->
+    <div id="swipeOverlay" class="pointer-events-none fixed inset-0 z-40 hidden transition-opacity duration-300 opacity-0">
+        <!-- Raise (Up) -->
+        <div id="hintRaise" class="absolute top-24 left-1/2 -translate-x-1/2 text-emerald-400 font-black text-2xl uppercase tracking-widest flex flex-col items-center gap-2 transition-all duration-200 scale-90 opacity-30">
+            <i class="ph-bold ph-arrow-up text-4xl animate-bounce"></i>
+            <span class="drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">RAISE</span>
+        </div>
+        <!-- Call (Right) -->
+        <div id="hintCall" class="absolute right-4 md:right-12 top-1/2 -translate-y-1/2 text-blue-400 font-black text-2xl uppercase tracking-widest flex flex-col items-center gap-2 transition-all duration-200 scale-90 opacity-30">
+            <i class="ph-bold ph-arrow-right text-4xl animate-pulse"></i>
+            <span class="drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">CALL</span>
+        </div>
+        <!-- Fold (Left) -->
+        <div id="hintFold" class="absolute left-4 md:left-12 top-1/2 -translate-y-1/2 text-slate-500 font-black text-2xl uppercase tracking-widest flex flex-col items-center gap-2 transition-all duration-200 scale-90 opacity-30">
+            <i class="ph-bold ph-arrow-left text-4xl animate-pulse"></i>
+            <span class="drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">FOLD</span>
+        </div>
+    </div>
+
+    <!-- FLASH OVERLAY -->
+    <div id="flashOverlay" class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none hidden">
+        <div id="flashText" class="text-6xl md:text-8xl font-black uppercase tracking-tighter drop-shadow-[0_0_25px_rgba(0,0,0,1)] transform transition-all duration-300 scale-0 text-center px-4"></div>
+    </div>
+
+    <!-- SPLASH SCREEN -->
+    <div id="splashScreen" class="fixed inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center p-4 transition-opacity duration-500">
+        <div class="max-w-md w-full text-center space-y-8 relative">
+            <!-- Logo/Title -->
+            <div class="animate-in fade-in zoom-in duration-700">
+                <i class="ph-fill ph-spade text-6xl text-emerald-500 mb-4 inline-block animate-bounce"></i>
+                <h1 class="text-4xl md:text-6xl font-black text-white tracking-tighter mb-2">RSDP <span class="text-emerald-500">GTO</span></h1>
+                <p class="text-xl text-slate-400 font-mono tracking-widest uppercase">TRAINER</p>
+            </div>
+
+            <!-- Start Buttons -->
+            <div class="animate-in slide-in-from-bottom-8 duration-700 delay-200 w-full space-y-3">
+                <button onclick="game.startGame()" class="w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-2xl rounded-2xl shadow-2xl shadow-emerald-900/40 transition-all hover:scale-[1.03] active:scale-[0.98] border-b-4 border-emerald-800 flex items-center justify-center gap-3">
+                    <i class="ph-bold ph-play"></i> START GRINDING
+                </button>
+                
+                <div class="mt-6 text-slate-500 text-xs font-mono">
+                    100BB 6-MAX & 9-MAX SOLVER RANGES
+                </div>
+            </div>
+            
+            <div class="absolute -bottom-16 right-0 text-[10px] font-mono text-slate-600">v1.9.2</div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="h-16 md:h-20 glass-panel flex items-center justify-between px-3 md:px-6 shrink-0 z-20 gap-2 md:gap-4 relative">
+        
+        <!-- Left: Rank & XP -->
+        <div class="flex flex-col w-1/3">
+            <div class="flex items-center gap-2 md:gap-3 mb-0.5 md:mb-1.5">
+                <div class="w-7 h-7 md:w-9 md:h-9 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-700 flex items-center justify-center font-black text-white text-xs md:text-sm neon-border shadow-lg shrink-0 border border-emerald-300/30">
+                    <span id="levelBadge">1</span>
+                </div>
+                <div class="flex flex-col truncate">
+                    <span id="rankTitle" class="text-[9px] md:text-xs font-black text-emerald-400 uppercase tracking-widest truncate neon-text-emerald">MICRO FISH</span>
+                    <span class="text-[8px] md:text-[9px] text-slate-400 font-medium hidden md:block">XP Progression</span>
+                </div>
+            </div>
+            <!-- XP Bar -->
+            <div class="w-full h-2 md:h-3.5 bg-slate-800/50 rounded-full overflow-hidden relative ring-1 ring-white/5 mt-0.5 md:mt-1">
+                <div id="xpBar" class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 xp-bar-fill w-0"></div>
+                <div id="xpText" class="absolute inset-0 flex items-center justify-center text-[7px] md:text-[9px] font-bold text-white/90 drop-shadow-md tracking-wider font-mono z-10">0 / 500 XP</div>
+            </div>
+        </div>
+
+        <!-- Center: Bankroll -->
+        <div class="flex flex-col items-center justify-center w-1/3 shrink-0">
+            <div class="text-[8px] md:text-[9px] text-slate-400 uppercase tracking-[0.2em] mb-0.5 md:mb-1 font-bold">Bankroll</div>
+            <div class="font-mono text-lg md:text-3xl font-black text-white tracking-tight flex items-center gap-1 drop-shadow-lg">
+                <span class="text-emerald-500">$</span><span id="bankrollDisplay">1,000</span>
+            </div>
+        </div>
+
+        <!-- Right: Multiplier & Shop -->
+        <div class="flex flex-col items-end w-1/3">
+            <div class="flex items-center gap-1 md:gap-3">
+                <!-- Controls (Condensed for Mobile) -->
+                <button id="soundToggle" onclick="game.toggleSound()" class="hidden md:block text-emerald-400 hover:text-emerald-300 transition-colors p-2" title="Sound Effects">
+                    <i id="soundIcon" class="ph-fill ph-speaker-high text-xl"></i>
+                </button>
+                <button id="saveToggle" onclick="game.toggleSaves()" class="hidden md:block text-slate-500 hover:text-purple-400 transition-colors p-2" title="Save/Load Game">
+                    <i class="ph-fill ph-floppy-disk text-xl"></i>
+                </button>
+                
+                <!-- Visible on Mobile & Desktop -->
+                <button id="statsToggle" onclick="game.toggleStats()" class="text-slate-500 hover:text-blue-400 transition-colors p-1.5 md:p-2" title="Leak Finder Stats">
+                    <i class="ph-fill ph-chart-bar text-lg md:text-xl"></i>
+                </button>
+                <button id="shopToggle" onclick="game.toggleShop()" class="text-slate-500 hover:text-yellow-400 transition-colors p-1.5 md:p-2 relative" title="Grinder Shop">
+                    <i class="ph-fill ph-shopping-cart text-lg md:text-xl"></i>
+                </button>
+                <button id="pauseToggle" onclick="game.togglePause()" class="text-slate-500 hover:text-yellow-400 transition-colors p-1.5 md:p-2" title="Pause Game">
+                    <i id="pauseIcon" class="ph-fill ph-pause text-lg md:text-xl"></i>
+                </button>
+                
+                <!-- Multiplier & Streak -->
+                <div class="flex flex-col items-end mr-1 hidden lg:flex">
+                    <div id="multiplierBadge" class="text-sm font-black text-slate-500 transition-colors">1x</div>
+                    <span class="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Multiplier</span>
+                </div>
+
+                <div class="w-9 h-9 md:w-11 md:h-11 rounded-full border-2 border-slate-700/50 flex items-center justify-center bg-slate-800/50 relative overflow-hidden shadow-inner ml-1 shrink-0">
+                     <i id="streakIcon" class="ph-fill ph-fire text-slate-600 text-lg md:text-xl transition-all duration-300"></i>
+                     <div class="absolute bottom-0 w-full h-1 bg-slate-700" id="streakBar"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- SUB-HEADER (Mode Select & Toggle) -->
+    <div class="bg-slate-900/40 border-b border-white/5 px-3 md:px-6 py-2 flex justify-between items-center shrink-0 backdrop-blur-sm min-h-[52px]">
+         <div class="flex flex-col gap-1.5 w-full md:w-auto">
+             <div class="flex gap-2 items-center">
+                 <div class="relative w-full md:w-56">
+                    <select id="modeSelect" class="w-full appearance-none bg-slate-800/80 text-[10px] md:text-xs font-bold text-slate-200 pl-2 pr-6 py-1 md:pl-3 md:pr-8 md:py-1.5 rounded border border-white/10 focus:outline-none focus:border-emerald-500/50 hover:bg-slate-800 transition-colors cursor-pointer shadow-sm">
+                        <option value="rfi">Drill: 6-Max Cash RFI</option>
+                        <option value="def">Drill: 6-Max Cash BB Defense</option>
+                        <option value="vs_3bet">Drill: 6-Max Vs 3-Bet (NEW)</option>
+                        <option value="mtt_rfi">Drill: 9-Max MTT RFI</option>
+                        <option value="campaign">Campaign: The Ladder</option>
+                        <option value="custom">Custom Drill (RFI)</option>
+                    </select>
+                    <i class="ph-bold ph-caret-down absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none"></i>
+                 </div>
+                 <!-- Edit Range Button (Hidden by default) -->
+                 <button id="editRangeBtn" onclick="game.openCustomRangeModal()" class="hidden px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold rounded border border-purple-400/30 uppercase tracking-wider whitespace-nowrap transition-colors flex items-center gap-1">
+                    <i class="ph-bold ph-pencil-simple"></i> <span>EDIT</span>
+                 </button>
+             </div>
+             
+             <!-- FILTER TOGGLE WITH METER -->
+             <div class="flex items-center gap-3">
+                <label id="edgeCaseLabel" class="flex items-center gap-1.5 cursor-pointer group opacity-50 pointer-events-none transition-opacity" title="Only available in 6-Max Cash modes">
+                    <div class="relative">
+                        <input type="checkbox" id="edgeCaseToggle" class="peer sr-only">
+                        <div class="w-6 h-3 bg-slate-800 rounded-full peer-checked:bg-emerald-600 peer-checked:border-emerald-500/50 border border-slate-700 transition-all"></div>
+                        <div class="absolute left-0.5 top-0.5 w-2 h-2 bg-slate-400 rounded-full transition-all peer-checked:translate-x-3 peer-checked:bg-white"></div>
+                    </div>
+                    <span class="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 transition-colors uppercase tracking-wider">Adaptive Difficulty</span>
+                </label>
+                
+                <!-- Heat Meter -->
+                <div id="adaptiveMeterContainer" class="hidden flex items-center gap-1.5 bg-slate-950/50 px-2 py-1 rounded-full border border-white/5">
+                    <div class="text-[8px] font-mono font-bold text-slate-400 uppercase">Heat</div>
+                    <div class="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                        <div id="adaptiveHeatBar" class="h-full w-0 heat-meter-bar"></div>
+                    </div>
+                </div>
+             </div>
+         </div>
+         
+        <div class="flex items-center gap-2 md:gap-3 hidden md:flex">
+            <div id="levelIndicator" class="hidden md:block text-[9px] font-mono text-yellow-400 font-bold uppercase tracking-wider bg-yellow-900/20 px-2 py-1 rounded border border-yellow-500/30">Lvl 1: Rock</div>
+            <div class="text-[9px] md:text-[10px] font-mono text-slate-500 uppercase tracking-wider" id="handCounter">Hand #1</div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        <!-- LEFT: FELT AREA -->
+        <main class="flex-1 relative flex flex-col justify-center items-center p-4" id="gameFelt">
+            
+             <!-- Info Overlay (Top) -->
+            <div class="absolute top-6 left-0 right-0 flex justify-center gap-8 text-xs md:text-sm font-bold text-white/70 uppercase tracking-widest pointer-events-none z-10">
+                <div id="villainDisplay" class="hidden flex flex-col items-center gap-2 animate-fade-in">
+                    <div class="w-12 h-12 rounded-full bg-gradient-to-b from-red-900 to-red-950 border-2 border-red-500/50 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.3)] relative">
+                        <span id="villainPosText" class="font-black text-red-100 text-shadow">CO</span>
+                        <div class="absolute -bottom-2 -right-2 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-red-400 font-bold" id="villainActionBadge">R</div>
+                    </div>
+                    <span class="text-[10px] text-red-400/80 font-bold tracking-widest">VILLAIN</span>
+                </div>
+            </div>
+
+            <!-- Center Pot/Board Area -->
+            <div class="flex flex-col items-center gap-4 relative z-10 w-full">
+                <!-- Floating Profit -->
+                <div id="floatingProfit" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none whitespace-nowrap z-30 opacity-0 scale-50"></div>
+                
+                <div class="flex gap-4 perspective-1000" id="holeCardsArea">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- Hero Info -->
+            <div class="absolute bottom-6 flex items-center gap-3 z-10 pointer-events-none">
+                <div class="relative group pointer-events-auto">
+                    <div class="w-16 h-16 rounded-full bg-gradient-to-b from-slate-800 to-slate-900 border-2 border-emerald-500 flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.2)] z-10 relative group-hover:scale-105 transition-transform duration-300">
+                        <span id="heroPosText" class="font-black text-lg text-white tracking-tighter">BTN</span>
+                    </div>
+                    <!-- Card Protector (Dynamic) -->
+                    <div id="heroProtector" class="hidden absolute bottom-0 -right-12 w-10 h-10 animate-float z-20 filter drop-shadow-lg transition-all duration-500">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer Bar for Mobile (Shows at bottom of felt area) -->
+            <div class="absolute bottom-0 left-0 w-full h-1.5 bg-slate-900 md:hidden">
+                 <div id="timerBar" class="h-full bg-emerald-500 w-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+            </div>
+
+        </main>
+
+        <!-- RIGHT SIDEBAR (DESKTOP ONLY - For Controls) -->
+        <aside class="hidden md:flex w-80 glass-panel border-l border-white/10 flex-col justify-between p-6 shrink-0 z-30 relative overflow-y-auto">
+             <!-- Stats in Sidebar -->
+             <div class="space-y-6">
+                <div class="p-4 bg-slate-900/50 rounded-xl border border-white/5 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Current Streak</div>
+                    <div class="text-3xl font-black text-white flex items-center justify-center gap-2">
+                         <i class="ph-fill ph-fire text-orange-500"></i> <span id="desktopStreak">0</span>
+                    </div>
+                </div>
+                
+                <!-- Timer for Desktop -->
+                <div>
+                    <div class="flex justify-between text-[10px] text-slate-400 font-bold uppercase mb-1">
+                        <span>Decision Time</span>
+                    </div>
+                    <div class="h-4 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                        <div id="desktopTimerBar" class="h-full bg-cyan-500 w-full transition-all duration-200 shadow-[0_0_10px_rgba(6,182,212,0.5)]"></div>
+                    </div>
+                </div>
+             </div>
+
+             <!-- Desktop Buttons -->
+             <div class="flex flex-col gap-3" id="desktopActionButtons">
+                <button onclick="game.handleInput('raise')" class="h-20 btn-raise rounded-xl text-white font-black text-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    <span id="raiseLabelDesktop">RAISE</span> <span class="text-xs opacity-60 font-normal">(R)</span>
+                </button>
+                <button onclick="game.handleInput('call')" id="desktopBtnCall" class="h-16 btn-call rounded-xl text-white font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    CALL <span class="text-xs opacity-60 font-normal">(C)</span>
+                </button>
+                <button onclick="game.handleInput('fold')" class="h-16 btn-fold rounded-xl text-white font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    FOLD <span class="text-xs opacity-60 font-normal">(F)</span>
+                </button>
+
+                <!-- Manual Analysis Button (Desktop) -->
+                <button onclick="game.reviewLastHand()" class="mt-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-bold text-xs rounded-lg border border-white/5 flex items-center justify-center gap-2 transition-all">
+                    <i class="ph-fill ph-graph"></i> LAST HAND ANALYSIS
+                </button>
+             </div>
+             
+             <div class="text-center mt-auto pt-6">
+                 <div class="text-[10px] font-mono text-slate-600">v1.9.2</div>
+             </div>
+        </aside>
+
+        <!-- MOBILE FOOTER (Buttons Only) -->
+        <footer class="md:hidden glass-panel p-3 pb-6 shrink-0 z-30 flex flex-col gap-2">
+            <div class="grid grid-cols-3 gap-2" id="mobileActionButtons">
+                 <button onclick="game.handleInput('fold')" class="btn-fold h-16 rounded-xl text-white font-bold text-lg flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform">
+                    <span>FOLD</span>
+                </button>
+                <button onclick="game.handleInput('call')" id="btnCall" class="btn-call h-16 rounded-xl text-white font-bold text-lg flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform">
+                    <span>CALL</span>
+                </button>
+                <button onclick="game.handleInput('raise')" id="mobileBtnRaise" class="btn-raise h-16 rounded-xl text-white font-bold text-lg flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform">
+                    <span id="raiseLabel">RAISE</span>
+                </button>
+            </div>
+            <!-- Manual Analysis Button (Mobile) -->
+            <button onclick="game.reviewLastHand()" class="w-full py-3 bg-slate-800/80 hover:bg-slate-700 text-slate-400 font-bold text-[10px] rounded-lg border border-white/5 flex items-center justify-center gap-2 uppercase tracking-wider">
+                 <i class="ph-bold ph-graph"></i> Review Last Hand
+            </button>
+        </footer>
+
+    </div>
+
+    <!-- PAUSE MODAL -->
+    <div id="pauseModal" class="fixed inset-0 z-[60] hidden flex-col items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div class="text-center space-y-6">
+                <div>
+                    <h2 class="text-4xl font-black text-white tracking-tight mb-2 neon-text-emerald">GAME PAUSED</h2>
+                    <p class="text-slate-400 mb-4 font-medium">Take a breath. Refocus.</p>
+                </div>
+                
+                <button onclick="game.togglePause()" class="w-64 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                    <i class="ph-bold ph-play"></i> RESUME GAME
+                </button>
+                
+                <button onclick="game.exitToMenu()" class="w-64 px-8 py-3 bg-red-900/50 hover:bg-red-800 text-red-200 font-bold rounded-xl border border-red-800/50 transition-transform flex items-center justify-center gap-2 mx-auto">
+                    <i class="ph-bold ph-sign-out"></i> EXIT TO MENU
+                </button>
+
+                <div class="grid grid-cols-2 gap-4 w-64 mx-auto md:hidden pt-4 border-t border-white/10">
+                    <button onclick="game.toggleSound()" class="py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold text-xs flex items-center justify-center gap-2">
+                        <i class="ph-fill ph-speaker-high"></i> SOUND
+                    </button>
+                    <button onclick="game.toggleSaves()" class="py-3 bg-purple-900/50 hover:bg-purple-900/80 text-purple-300 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-purple-500/20">
+                        <i class="ph-fill ph-floppy-disk"></i> SAVES
+                    </button>
+                </div>
+            </div>
+    </div>
+    
+    <!-- CUSTOM RANGE MODAL (UPDATED WITH VISUAL GRID & PRESETS) -->
+    <div id="customRangeModal" class="fixed inset-0 z-[110] hidden flex-col items-center justify-center p-4 bg-slate-950/95 backdrop-blur-xl animate-in zoom-in duration-300">
+        <div class="max-w-2xl w-full bg-slate-900 rounded-2xl border border-white/10 shadow-2xl p-6 flex flex-col max-h-[95vh]">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <div>
+                    <h3 class="text-2xl font-black text-white uppercase tracking-tighter">CUSTOM RFI RANGE</h3>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Select hands to RAISE. All others are Folds.</p>
+                </div>
+                <button onclick="game.closeCustomRangeModal()" class="text-slate-400 hover:text-white"><i class="ph-bold ph-x text-2xl"></i></button>
+            </div>
+            
+            <div class="flex flex-col md:flex-row gap-4 overflow-hidden flex-1 min-h-0">
+                <!-- Visual Grid -->
+                <div class="flex flex-col items-center gap-2">
+                     <div id="rangeGrid" class="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-[1px] bg-slate-800 w-[280px] h-[280px] sm:w-[360px] sm:h-[360px] border border-slate-700 shadow-xl">
+                         <!-- Injected JS -->
+                     </div>
+                     
+                     <!-- Quick Actions -->
+                     <div class="grid grid-cols-3 gap-2 w-full max-w-[360px]">
+                         <button onclick="game.rangeAction('clear')" class="bg-red-900/30 hover:bg-red-900/50 text-red-300 text-[9px] font-bold py-2 rounded border border-red-500/20">CLEAR</button>
+                         <button onclick="game.rangeAction('pairs')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">PAIRS</button>
+                         <button onclick="game.rangeAction('broadway')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">BROADWAYS</button>
+                         <button onclick="game.rangeAction('suited')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">SUITED</button>
+                         <button onclick="game.rangeAction('offsuit')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold py-2 rounded border border-slate-600/30">OFFSUIT</button>
+                         <button onclick="game.rangeAction('fill')" class="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 text-[9px] font-bold py-2 rounded border border-emerald-500/20">ALL</button>
+                     </div>
+                </div>
+
+                <!-- Text Output (Read Only/Copy) & Controls -->
+                <div class="flex flex-col flex-1 gap-2 min-h-0">
+                    <!-- NEW: GTO PRESETS SECTION -->
+                    <div class="bg-slate-950/50 p-3 rounded-xl border border-white/5 mb-1">
+                        <div class="text-[9px] text-purple-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-1">
+                            <i class="ph-fill ph-lightning"></i> Load GTO Preset (6-Max)
+                        </div>
+                        <div class="grid grid-cols-5 gap-1">
+                            <button onclick="game.loadGTOPreset('UTG')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">UTG</button>
+                            <button onclick="game.loadGTOPreset('HJ')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">HJ</button>
+                            <button onclick="game.loadGTOPreset('CO')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">CO</button>
+                            <button onclick="game.loadGTOPreset('BTN')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">BTN</button>
+                            <button onclick="game.loadGTOPreset('SB')" class="bg-slate-800 hover:bg-purple-600 text-white text-[9px] font-bold py-1.5 rounded border border-white/10 transition-colors">SB</button>
+                        </div>
+                    </div>
+
+                    <div class="text-[10px] text-slate-500 font-bold uppercase mb-1">Range String</div>
+                    <textarea id="customRangeInput" class="w-full flex-1 bg-slate-950 border border-slate-700 rounded-lg p-3 text-[10px] font-mono text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors resize-none" readonly></textarea>
+                    
+                    <div class="mt-auto pt-2 flex flex-col gap-2">
+                        <button onclick="game.saveCustomRange()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2">
+                            <i class="ph-bold ph-check"></i> SAVE & PLAY
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LEVEL UP MODAL -->
+    <div id="levelUpModal" class="fixed inset-0 z-[100] hidden flex-col items-center justify-center p-4 bg-emerald-900/90 backdrop-blur-xl animate-in zoom-in duration-500">
+        <div class="text-center space-y-4">
+            <div class="inline-flex p-4 rounded-full bg-emerald-500 text-white shadow-[0_0_50px_rgba(16,185,129,0.6)] animate-bounce">
+                <i class="ph-fill ph-trophy text-5xl"></i>
+            </div>
+            <h2 class="text-5xl font-black text-white tracking-tighter">LEVEL UP!</h2>
+            <p class="text-emerald-200 text-lg font-bold tracking-wider" id="levelUpText">You are now The Thief</p>
+             <div class="py-6">
+                <div class="text-xs font-mono text-emerald-300 uppercase tracking-widest mb-1">Bonus Reward</div>
+                <div class="text-4xl font-black text-white">+$1,000</div>
+            </div>
+            <button onclick="game.closeLevelUp()" class="w-64 px-8 py-4 bg-white text-emerald-900 font-black rounded-xl shadow-2xl transition-transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                CONTINUE CAMPAIGN
+            </button>
+        </div>
+    </div>
+
+    <!-- LEAK FINDER (STATS) MODAL -->
+    <div id="statsModal" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl ring-1 ring-white/10 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                    <h2 class="text-2xl font-black italic uppercase tracking-tighter text-white">LEAK FINDER</h2>
+                    <div class="text-sm font-mono text-blue-400 font-bold mt-1">PERFORMANCE HEATMAP</div>
+                </div>
+                <button onclick="game.toggleStats()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="ph-bold ph-x text-2xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto no-scrollbar flex flex-col items-center">
+                <div class="relative p-4">
+                    <div class="flex flex-col">
+                        <div class="flex mb-1 pl-4 w-[260px]">
+                            <div class="grid grid-cols-[repeat(13,minmax(0,1fr))] w-full text-[7px] text-slate-500 font-mono text-center">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                        </div>
+                        <div class="flex">
+                            <div class="flex flex-col justify-between h-[260px] mr-1 text-[7px] text-slate-500 font-mono">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                            <div id="statsGrid" class="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-[1px] bg-slate-800 w-[260px] h-[260px] border border-slate-800 shadow-2xl"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="selectedHandStats" class="mt-2 bg-slate-900/80 p-3 rounded-lg w-[260px] border border-white/10 flex items-center justify-center h-12 info-box-transition text-xs font-bold text-slate-400">Tap a cell for details</div>
+                <div class="w-[260px] mt-3 flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-red-600/80 rounded-sm"></div> Leak</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-yellow-500/80 rounded-sm"></div> OK</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-emerald-500/80 rounded-sm"></div> Good</div>
+                </div>
+                <button onclick="game.resetStats()" class="mt-6 text-[10px] text-red-500/50 hover:text-red-400 underline uppercase tracking-widest font-bold transition-colors">Reset Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SAVE/LOAD MODAL -->
+    <div id="saveModal" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl ring-1 ring-white/10 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                    <h2 class="text-2xl font-black italic uppercase tracking-tighter text-white">SAVE SLOTS</h2>
+                    <div class="text-xs font-mono text-purple-400 font-bold mt-1">MANAGE YOUR PROGRESS</div>
+                </div>
+                <button onclick="game.toggleSaves()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="ph-bold ph-x text-2xl"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto no-scrollbar flex flex-col gap-4">
+                <div id="saveSlotContainer"></div>
+                
+                <!-- FILE IMPORT/EXPORT SECTION -->
+                <div class="pt-4 mt-4 border-t border-white/10">
+                     <div class="flex items-center gap-2 mb-3">
+                        <i class="ph-fill ph-file-cloud text-blue-400"></i>
+                        <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wide">Manual Backup</h3>
+                     </div>
+                     <p class="text-[10px] text-slate-500 mb-3 leading-relaxed">
+                         <strong class="text-emerald-400">PERSISTENCE FIX:</strong> Browser storage may be wiped in this environment. Download your save file to keep it safe.
+                     </p>
+                     <div class="flex gap-2">
+                         <button onclick="game.triggerFileImport()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-3 rounded-lg border border-white/5 flex items-center justify-center gap-2 transition-colors shadow-lg">
+                             <i class="ph-bold ph-upload-simple"></i> UPLOAD SAVE
+                         </button>
+                     </div>
+                     <!-- Fallback String Sync -->
+                     <div id="syncBoxContainer" class="hidden mt-4">
+                         <textarea id="syncStringInput" class="w-full h-24 bg-slate-950 border border-slate-700 rounded-lg p-3 text-[10px] font-mono text-emerald-400 focus:outline-none focus:border-emerald-500 mb-2 resize-none placeholder-slate-600"></textarea>
+                         <button id="syncActionBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 rounded-lg shadow-lg">LOAD</button>
+                     </div>
+                     <button onclick="game.prepareExport()" class="text-[10px] text-slate-600 underline mt-2 w-full text-center hover:text-slate-400">View Legacy Sync String</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SHOP MODAL -->
+    <div id="shopModal" class="fixed inset-0 z-50 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl ring-1 ring-white/10 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <div>
+                    <h2 class="text-2xl font-black italic uppercase tracking-tighter text-white">THE GRINDER SHOP</h2>
+                    <div class="text-sm font-mono text-emerald-400 font-bold flex items-center gap-2 mt-1">
+                        BANKROLL: $<span id="shopBankroll">0</span>
+                    </div>
+                </div>
+                <button onclick="game.toggleShop()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="ph-bold ph-x text-2xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto no-scrollbar">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 mt-2">Card Protectors (Lucky Charms)</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8" id="shopProtectors"></div>
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Table Felts</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8" id="shopFelts"></div>
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Card Decks</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="shopDecks"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEEDBACK MODAL -->
+    <div id="feedbackModal" class="fixed inset-0 z-[55] hidden flex-col items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div class="glass-modal rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto no-scrollbar flex flex-col shadow-2xl ring-1 ring-white/10">
+            <div class="p-5 border-b border-white/5 flex justify-between items-start bg-white/5">
+                <div>
+                    <h2 id="feedbackTitle" class="text-2xl font-black italic uppercase tracking-tighter drop-shadow-md">CORRECT</h2>
+                    <p id="feedbackSubtitle" class="text-xs text-slate-400 mt-1 font-medium">BTN should Raise A5s vs CO Open</p>
+                    <div id="rewardDetails" class="mt-2 flex gap-2 text-[10px] font-mono font-bold"></div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">YOUR HAND</div>
+                    <div id="feedbackHand" class="font-mono font-bold text-lg text-white bg-slate-800/50 px-2 py-1 rounded border border-white/5">A<span class="text-red-500">♥</span> 5<span class="text-red-500">♥</span></div>
+                </div>
+                <button onclick="game.nextHand()" class="text-slate-400 hover:text-white ml-2">
+                     <i class="ph-bold ph-x text-xl"></i>
+                </button>
+            </div>
+            <div class="p-5 flex flex-col items-center bg-slate-950/50">
+                <div class="relative p-2">
+                     <div class="flex flex-col">
+                        <div class="flex mb-1 pl-4 w-[240px]">
+                            <div class="grid grid-cols-[repeat(13,minmax(0,1fr))] w-full text-[7px] text-slate-500 font-mono text-center">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                        </div>
+                        <div class="flex">
+                            <div class="flex flex-col justify-between h-[240px] mr-1 text-[7px] text-slate-500 font-mono">
+                                <span>A</span><span>K</span><span>Q</span><span>J</span><span>T</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span>
+                            </div>
+                            <div id="matrixGrid" class="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-[1px] bg-slate-800 w-[240px] h-[240px] border border-slate-800 shadow-lg"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="matrixInfo" class="mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 border border-white/5 info-box-transition">Hover for info</div>
+            </div>
+            <div id="feedbackLegend" class="px-6 pb-2 flex justify-center gap-4 text-[9px] uppercase tracking-wider font-bold text-slate-500">
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-sm bg-emerald-500 shadow-sm"></div> <span id="legendRaiseText">Raise</span></div>
+                <div id="feedbackLegendCall" class="flex items-center gap-1"><div class="w-2 h-2 rounded-sm bg-blue-500 shadow-sm"></div> Call</div>
+                <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-sm bg-slate-700"></div> Fold</div>
+            </div>
+             <div class="p-4 bg-slate-900/50 border-t border-white/5 text-center">
+                 <div class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-2">PRESS SPACE TO CONTINUE</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Entry Point -->
+    <script type="module">
+        import { HoldemTrainer } from './js/game.js';
+        
+        // Initialize Game
+        window.game = new HoldemTrainer();
+    </script>
+</body>
+</html>
