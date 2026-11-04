@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RSDP GTO Trainer v1.9.2</title>
+    <title>RSDP GTO Trainer v1.10.0</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -288,11 +288,11 @@
                 </button>
                 
                 <div class="mt-6 text-slate-500 text-xs font-mono">
-                    100BB 6-MAX & 9-MAX SOLVER RANGES
+                    SIMPLIFIED 100BB 6-MAX & 9-MAX CHARTS
                 </div>
             </div>
             
-            <div class="absolute -bottom-16 right-0 text-[10px] font-mono text-slate-600">v1.9.2</div>
+            <div class="absolute -bottom-16 right-0 text-[10px] font-mono text-slate-600">v1.10.0</div>
         </div>
     </div>
 
@@ -370,7 +370,7 @@
                         <option value="rfi">Drill: 6-Max Cash RFI</option>
                         <option value="def">Drill: 6-Max Cash BB Defense</option>
                         <option value="vs_3bet">Drill: 6-Max Vs 3-Bet (NEW)</option>
-                        <option value="mtt_rfi">Drill: 9-Max MTT RFI</option>
+                        <option value="mtt_rfi">Drill: 9-Max RFI (100bb, no ante)</option>
                         <option value="campaign">Campaign: The Ladder</option>
                         <option value="custom">Custom Drill (RFI)</option>
                     </select>
@@ -497,7 +497,7 @@
              </div>
              
              <div class="text-center mt-auto pt-6">
-                 <div class="text-[10px] font-mono text-slate-600">v1.9.2</div>
+                 <div class="text-[10px] font-mono text-slate-600">v1.10.0</div>
              </div>
         </aside>
 
@@ -557,7 +557,7 @@
                     <h3 class="text-2xl font-black text-white uppercase tracking-tighter">CUSTOM RFI RANGE</h3>
                     <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Select hands to RAISE. All others are Folds.</p>
                 </div>
-                <button onclick="game.closeCustomRangeModal()" class="text-slate-400 hover:text-white"><i class="ph-bold ph-x text-2xl"></i></button>
+                <button onclick="game.cancelCustomRange()" class="text-slate-400 hover:text-white" title="Close without saving"><i class="ph-bold ph-x text-2xl"></i></button>
             </div>
             
             <div class="flex flex-col md:flex-row gap-4 overflow-hidden flex-1 min-h-0">
@@ -617,7 +617,7 @@
             <p class="text-emerald-200 text-lg font-bold tracking-wider" id="levelUpText">You are now The Thief</p>
              <div class="py-6">
                 <div class="text-xs font-mono text-emerald-300 uppercase tracking-widest mb-1">Bonus Reward</div>
-                <div class="text-4xl font-black text-white">+$1,000</div>
+                <div id="levelUpBonus" class="text-4xl font-black text-white">+$1,000</div>
             </div>
             <button onclick="game.closeLevelUp()" class="w-64 px-8 py-4 bg-white text-emerald-900 font-black rounded-xl shadow-2xl transition-transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
                 CONTINUE CAMPAIGN
@@ -638,6 +638,7 @@
                 </button>
             </div>
             <div class="p-6 overflow-y-auto no-scrollbar flex flex-col items-center">
+                <select id="statsFilter" onchange="game.setStatsFilter(this.value)" class="w-[260px] bg-slate-800/80 text-xs font-bold text-slate-200 px-3 py-1.5 rounded border border-white/10 focus:outline-none focus:border-blue-500/50"></select>
                 <div class="relative p-4">
                     <div class="flex flex-col">
                         <div class="flex mb-1 pl-4 w-[260px]">
@@ -659,6 +660,7 @@
                     <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-yellow-500/80 rounded-sm"></div> OK</div>
                     <div class="flex items-center gap-1.5"><div class="w-2 h-2 bg-emerald-500/80 rounded-sm"></div> Good</div>
                 </div>
+                <div class="w-[260px] mt-2 text-[9px] text-slate-500 text-center">Faded cells have fewer than 3 hands. Timeouts are not counted as leaks.</div>
                 <button onclick="game.resetStats()" class="mt-6 text-[10px] text-red-500/50 hover:text-red-400 underline uppercase tracking-widest font-bold transition-colors">Reset Data</button>
             </div>
         </div>
@@ -743,7 +745,7 @@
                     <div class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">YOUR HAND</div>
                     <div id="feedbackHand" class="font-mono font-bold text-lg text-white bg-slate-800/50 px-2 py-1 rounded border border-white/5">A<span class="text-red-500">♥</span> 5<span class="text-red-500">♥</span></div>
                 </div>
-                <button onclick="game.nextHand()" class="text-slate-400 hover:text-white ml-2">
+                <button onclick="game.closeFeedback()" class="text-slate-400 hover:text-white ml-2">
                      <i class="ph-bold ph-x text-xl"></i>
                 </button>
             </div>
@@ -779,7 +781,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, serverTimestamp, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         // --- PASTE YOUR FIREBASE CONFIG HERE ---
         const firebaseConfig = {
@@ -824,17 +826,29 @@
                     }
                 };
                 
+                // Resolve exactly once. If sign-in fails or takes too long, carry on offline with
+                // this device's saved data instead of hanging (which left the game half-started
+                // with default stats that then overwrote the real save).
                 return new Promise((resolve) => {
+                    let settled = false;
+                    const finish = (ok) => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(fallback);
+                        if (!ok) this.offline = true;
+                        resolve(ok);
+                    };
+                    const fallback = setTimeout(() => { console.warn("Cloud sign-in timed out. Running in Offline Mode."); finish(false); }, 8000);
                     onAuthStateChanged(auth, async (user) => {
                         if (user) {
                             userUid = user.uid;
                             console.log("Logged in as:", userUid);
-                            await this.pullFromCloud(); 
-                            resolve(true);
+                            if (!settled) await this.pullFromCloud();
+                            finish(true);
                         } else {
-                            signInAnonymously(auth).catch(handleAuthError);
+                            signInAnonymously(auth).catch((error) => { handleAuthError(error); finish(false); });
                         }
-                    }, (error) => handleAuthError(error));
+                    }, (error) => { handleAuthError(error); finish(false); });
                 });
             }
 
@@ -877,19 +891,23 @@
                     poker_bankroll: parseFloat(this.get('poker_bankroll', 1000)),
                     poker_xp: parseInt(this.get('poker_xp', 0)),
                     poker_total_hands: parseInt(this.get('poker_total_hands', 0)),
-                    poker_player_name: this.get('poker_player_name', 'Grinder'),
+                    // Missing locally means "signed out to menu": delete it in the cloud too, or the
+                    // next load pulls it back and skips the menu.
+                    poker_player_name: this.get('poker_player_name', null) || deleteField(),
                     poker_campaign_level: parseInt(this.get('poker_campaign_level', 0)),
                     // Complex Objects (Parse before sending to keep them as objects in DB)
                     poker_hand_stats: JSON.parse(this.get('poker_hand_stats', '{}')),
                     poker_inventory: JSON.parse(this.get('poker_inventory', '[]')),
                     poker_equipped: JSON.parse(this.get('poker_equipped', '{}')),
-                    poker_custom_range: JSON.parse(this.get('poker_custom_range', '[]'))
+                    poker_custom_range: JSON.parse(this.get('poker_custom_range', '[]')),
+                    poker_hand_stats_by_spot: JSON.parse(this.get('poker_hand_stats_by_spot', '{}'))
                 };
 
                 // Add Save Slots
                 for(let i=1; i<=3; i++) {
                     const slot = this.get(`poker_save_slot_${i}`, null);
-                    if(slot) payload[`poker_save_slot_${i}`] = JSON.parse(slot);
+                    // Deleted slots must be deleted in the cloud as well (merge:true keeps old fields).
+                    payload[`poker_save_slot_${i}`] = slot ? JSON.parse(slot) : deleteField();
                 }
 
                 try {
@@ -915,12 +933,20 @@
                 } catch (e) { return false; }
             }
 
-            static remove(key) { try { localStorage.removeItem(key); } catch(e) {} }
+            static remove(key) { try { localStorage.removeItem(key); this.debounceCloudSave(); } catch(e) {} }
+
+            // Push now instead of waiting for the debounce. Call before any page reload, or the
+            // reload pulls the older cloud copy back over what was just changed.
+            static async flush() {
+                if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+                try { await this.pushToCloud(); } catch (e) { console.warn("Cloud flush failed:", e); }
+            }
             
             // Prevent hammering Firestore on every click
             static debounceCloudSave() {
                 if (this.saveTimer) clearTimeout(this.saveTimer);
                 this.saveTimer = setTimeout(() => {
+                    this.saveTimer = null;
                     this.pushToCloud();
                 }, 2000); // Wait for 2 seconds of inactivity
             }
@@ -1016,43 +1042,46 @@
         const POSITIONS_6MAX = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB'];
         const POSITIONS_9MAX = ['UTG', 'UTG+1', 'UTG+2', 'LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'];
 
+        // Simplified 100bb charts: one pure action per hand (real solver output mixes many hands).
+        // Ranges can be typed either way round ("88-QQ" or "QQ-88"); see checkAction.
+        // SB is raise-or-fold on purpose: limping is not part of these drills.
         const RANGES = {
             CASH_6MAX: {
                 RFI: {
                     'UTG': { raise: ["66+", "A2s+", "K9s+", "Q9s+", "J9s+", "T9s", "98s", "87s", "ATo+", "KJo+", "QJo"] },
-                    'HJ':  { raise: ["44+", "A2s+", "K9s+", "Q9s+", "J9s+", "T9s", "98s", "87s", "76s", "ATo+", "KJo+", "QJo", "JTo"] },
-                    'CO':  { raise: ["22+", "A2s+", "K8s+", "Q9s+", "J8s+", "T8s+", "98s", "87s", "76s", "65s", "54s", "A8o+", "KTo+", "QTo+", "JTo", "T9o"] },
-                    'BTN': { raise: ["22+", "A2s+", "K2s+", "Q4s+", "J6s+", "T7s+", "97s+", "86s+", "75s+", "65s", "54s", "A2o+", "K8o+", "Q9o+", "J9o+", "T9o", "98o"] },
-                    'SB':  { raise: ["22+", "A2s+", "K2s+", "Q4s+", "J6s+", "T7s+", "97s+", "87s", "76s", "65s", "A2o+", "K8o+", "Q9o+", "J9o+", "T9o", "98o"] },
+                    'HJ':  { raise: ["44+", "A2s+", "K9s+", "Q9s+", "J9s+", "T9s", "98s", "87s", "76s", "ATo+", "KTo+", "QTo+", "JTo"] },
+                    'CO':  { raise: ["22+", "A2s+", "K8s+", "Q8s+", "J8s+", "T8s+", "98s", "87s", "76s", "65s", "54s", "A8o+", "K9o+", "QTo+", "JTo"] },
+                    'BTN': { raise: ["22+", "A2s+", "K2s+", "Q4s+", "J6s+", "T6s+", "96s+", "86s+", "75s+", "65s", "54s", "A2o+", "K8o+", "Q8o+", "J8o+", "T8o+", "98o"] },
+                    'SB':  { raise: ["22+", "A2s+", "K2s+", "Q4s+", "J6s+", "T7s+", "97s+", "87s", "76s", "65s", "A2o+", "K8o+", "Q8o+", "J8o+", "T8o+", "98o"] },
                     'BB': { raise: [] }
                 },
                 DEFENSE: {
-                     'BB_vs_UTG': { raise: ["QQ+", "AKs", "AKo", "A2s-A5s"], call: ["22-JJ", "A6s-AQs", "K9s-KQs", "Q9s-QJs", "J9s-JTs", "T8s-T9s", "98s", "87s", "76s", "65s", "ATo-AQo", "KJo-KQo", "QJo"] },
-                    'BB_vs_HJ': { raise: ["JJ+", "AQs+", "AKo", "A2s-A5s", "K9s", "T9s", "98s"], call: ["22-TT", "A6s-AJs", "K9s-KJs", "Q9s-QJs", "J8s+", "T8s", "87s", "76s", "65s", "54s", "ATo-AQo", "KJo-KQo", "QJo", "JTo"] },
-                    'BB_vs_CO': { raise: ["TT+", "AJs+", "AQo+", "A2s-A5s", "K9s", "Q9s", "J9s", "T9s", "98s", "87s"], call: ["22-99", "A6s-ATs", "K5s-KTs", "Q5s-QTs", "J7s+", "T7s+", "76s", "65s", "54s", "43s", "A8o-AJo", "KTo-KQo", "QTo-QJo", "JTo"] },
-                    'BB_vs_BTN': { raise: ["TT+", "AJs+", "KQs", "AQo+", "A2s-A5s", "K9s", "Q9s", "J9s", "T8s+", "98s", "87s", "76s"], call: ["22-99", "A6s-ATs", "K2s-KJs", "Q2s-QJs", "J5s+", "T6s", "96s+", "86s", "65s", "54s", "43s", "A2o-AJo", "K8o-KQo", "Q8o-QJo", "J8o-JTo", "T8o+", "98o"] },
-                    'BB_vs_SB': { raise: ["99+", "ATs+", "KJs+", "QJs", "AJo+", "KQo", "KJo"], call: ["22-88", "A2s-A9s", "K2s-KTs", "Q2s-QTs", "J4s+", "T6s+", "96s+", "85s+", "75s+", "64s+", "53s+", "43s", "A2o-AJo", "K2o-KTo", "Q4o-QTo", "J7o-JTo", "T7o-T9o", "97o+", "87o"] }
+                    'BB_vs_UTG': { raise: ["QQ+", "AKs", "AKo", "A2s-A5s"], call: ["22-JJ", "A6s-AQs", "K9s-KQs", "Q9s-QJs", "J9s-JTs", "T8s-T9s", "98s", "87s", "76s", "65s", "ATo-AQo", "KJo-KQo", "QJo"] },
+                    'BB_vs_HJ': { raise: ["JJ+", "AQs+", "AKo", "A2s-A5s", "K9s", "T9s", "98s"], call: ["22-TT", "A6s-AJs", "KTs-KQs", "Q9s-QJs", "J8s+", "T8s", "87s", "76s", "65s", "54s", "ATo-AQo", "KTo-KQo", "QJo", "JTo"] },
+                    'BB_vs_CO': { raise: ["TT+", "AJs+", "AQo+", "A2s-A5s", "K9s", "Q9s", "J9s", "T9s", "98s", "87s"], call: ["22-99", "A6s-ATs", "K4s-KQs", "Q6s-QJs", "J6s-JTs", "T6s-T8s", "96s-97s", "85s-86s", "75s-76s", "64s-65s", "53s-54s", "43s", "A2o-AJo", "K9o-KQo", "Q9o-QJo", "JTo"] },
+                    'BB_vs_BTN': { raise: ["TT+", "AJs+", "KQs", "AQo+", "A2s-A5s", "K9s", "Q9s", "J9s", "T8s+", "98s", "87s", "76s"], call: ["22-99", "A6s-ATs", "K2s-KJs", "Q2s-QJs", "J2s-JTs", "T3s-T7s", "94s-97s", "84s-86s", "73s-75s", "63s-65s", "52s-54s", "42s-43s", "32s", "A2o-AJo", "K4o-KQo", "Q6o-QJo", "J7o-JTo", "T7o-T9o", "97o-98o", "86o-87o", "76o"] },
+                    'BB_vs_SB': { raise: ["99+", "ATs+", "KJs+", "QJs", "AJo+", "KQo", "KJo"], call: ["22-88", "A2s-A9s", "K2s-KTs", "Q2s-QTs", "J4s+", "T5s+", "96s+", "85s+", "75s+", "64s+", "53s+", "43s", "A2o-ATo", "K2o-KTo", "Q4o-QJo", "J7o-JTo", "T7o-T9o", "97o+", "87o"] }
                 },
                 VS_3BET: {
-                    // Format: 'HERO_vs_VILLAIN'
+                    // Format: 'HERO_vs_VILLAIN'. Hero opened, villain 3-bet. raise = 4-bet.
                     'UTG_vs_HJ': {
                         raise: ["KK+", "AKs"], // 4-Bet Value
                         call: ["QQ-88", "AJs+", "KQs", "AQo+"] // Flat Call
                     },
                     'UTG_vs_CO': {
                         raise: ["QQ+", "AKs", "AKo"],
-                        call: ["JJ-77", "AJs-ATs", "KQs-KJs", "QJs", "JTs", "AQo"]
+                        call: ["JJ-77", "AQs-ATs", "KQs-KJs", "QJs", "JTs", "AQo"]
                     },
                     'UTG_vs_BTN': {
                         raise: ["QQ+", "AKs", "AKo", "A5s-A4s"], // Includes bluffs
                         call: ["JJ-66", "AQs-ATs", "KQs-KTs", "QJs-QTs", "JTs", "T9s", "98s", "AQo-AJo"]
                     },
                     'UTG_vs_SB': {
-                        raise: ["KK+", "AKs", "A5s"], 
+                        raise: ["KK+", "AKs", "AKo", "A5s"],
                         call: ["QQ-66", "AQs-ATs", "KQs-KTs", "QJs-QTs", "JTs", "T9s", "AQo"]
                     },
                     'UTG_vs_BB': {
-                        raise: ["KK+", "AKs"], 
+                        raise: ["KK+", "AKs", "AKo"],
                         call: ["QQ-66", "AQs-ATs", "KQs-KTs", "QJs-QTs", "JTs", "T9s", "AQo"]
                     },
                     
@@ -1076,8 +1105,8 @@
 
                     // HERO = CO
                     'CO_vs_BTN': {
-                        raise: ["TT+", "AQs+", "AKo", "A5s-A2s", "K8s", "K7s", "Q8s", "J8s"], // Wide 4-bet bluffs
-                        call: ["99-44", "AJs-A8s", "KQs-KTs", "QJs-QTs", "JTs-J9s", "T9s", "98s", "87s", "76s", "AQo-ATo", "KQo-KJo"]
+                        raise: ["TT+", "AQs+", "AKo", "A5s-A2s", "K8s", "Q8s", "J8s"], // Wide 4-bet bluffs
+                        call: ["99-44", "AJs-A8s", "KQs-K9s", "QJs-Q9s", "JTs-J9s", "T9s", "98s", "87s", "76s", "AQo-ATo", "KQo-KJo"]
                     },
                     'CO_vs_SB': {
                         raise: ["JJ+", "AKs", "AKo", "A5s-A4s"],
@@ -1091,21 +1120,36 @@
                     // HERO = BTN (Facing Blind 3-Bets)
                     'BTN_vs_SB': {
                         raise: ["TT+", "AQs+", "AKo", "A5s-A2s", "K9s", "Q9s"],
-                        call: ["99-44", "AJs-A6s", "KQs-K9s", "QJs-Q9s", "JTs-J9s", "T9s-T8s", "98s", "87s", "76s", "65s", "AQo-ATo", "KQo-KTo", "QJo", "JTo"]
+                        call: ["99-44", "AJs-A6s", "KQs-KTs", "QJs-QTs", "JTs-J9s", "T9s-T8s", "98s", "87s", "76s", "65s", "AQo-ATo", "KQo-KTo", "QJo-QTo", "JTo"]
                     },
                     'BTN_vs_BB': {
                         raise: ["TT+", "AQs+", "AKo", "A5s-A3s", "K9s-K8s"],
-                        call: ["99-22", "AJs-A2s", "KQs-K5s", "QJs-Q8s", "JTs-J8s", "T9s-T7s", "98s-97s", "87s-86s", "76s", "65s", "54s", "AQo-A9o", "KQo-KTo", "QJo-QTo", "JTo"]
+                        call: ["99-22", "AJs-A6s", "A2s", "KQs-K5s", "QJs-Q8s", "JTs-J8s", "T9s-T7s", "98s-97s", "87s-86s", "76s", "65s", "54s", "AQo-A9o", "KQo-KTo", "QJo-QTo", "JTo"]
+                    },
+
+                    // HERO = SB (Facing a BB 3-Bet)
+                    'SB_vs_BB': {
+                        raise: ["QQ+", "AKs", "AKo", "A5s-A4s", "K9s", "Q9s"],
+                        call: ["JJ-22", "AQs-A6s", "KQs-KTs", "QJs-QTs", "JTs-J9s", "T9s-T8s", "98s-97s", "87s", "76s", "65s", "AQo-ATo", "KQo-KJo", "QJo", "JTo"]
                     }
                 }
             },
+            // 9-max, 100bb, no ante. The last five seats play the same as the matching 6-max seats
+            // (LJ = 6-max UTG, HJ, CO, BTN, SB); see the assignments below this object.
             MTT_9MAX: {
                  RFI: {
-                    'UTG': { raise: ["77+", "AJs+", "KQs", "AQo+"] }, 'UTG+1': { raise: ["77+", "ATs+", "KJs+", "AQo+"] }, 'UTG+2': { raise: ["66+", "ATs+", "KJs+", "QJs", "AQo+"] }, 'LJ': { raise: ["55+", "A9s+", "KTs+", "QTs+", "JTs", "AJo+", "KQo"] }, 'HJ': { raise: ["44+", "A5s+", "K9s+", "Q9s+", "J9s+", "T9s", "ATo+", "KJo+", "QJo"] },
-                    'CO': { raise: ["22+", "A2s+", "K6s+", "Q8s+", "J8s+", "T8s+", "98s", "87s", "A9o+", "KTo+", "QTo+", "JTo"] }, 'BTN': { raise: ["22+", "A2s+", "K2s+", "Q5s+", "J7s+", "T7s+", "97s+", "87s", "76s", "65s", "A2o+", "K7o+", "Q9o+", "J9o+", "T9o"] }, 'SB': { raise: ["22+", "A2s+", "K4s+", "Q6s+", "J8s+", "T8s+", "98s", "87s", "A7o+", "K9o+", "Q9o+", "J9o+"] }, 'BB': { raise: [] }
+                    'UTG':   { raise: ["55+", "ATs+", "A5s", "KTs+", "QTs+", "JTs", "AJo+", "KQo"] },
+                    'UTG+1': { raise: ["44+", "A9s+", "A5s-A4s", "KTs+", "QTs+", "JTs", "T9s", "ATo+", "KQo"] },
+                    'UTG+2': { raise: ["33+", "A8s+", "A5s-A3s", "K9s+", "Q9s+", "J9s+", "T9s", "98s", "ATo+", "KJo+"] },
+                    'BB':    { raise: [] }
                  }
             }
         };
+        RANGES.MTT_9MAX.RFI['LJ']  = RANGES.CASH_6MAX.RFI['UTG'];
+        RANGES.MTT_9MAX.RFI['HJ']  = RANGES.CASH_6MAX.RFI['HJ'];
+        RANGES.MTT_9MAX.RFI['CO']  = RANGES.CASH_6MAX.RFI['CO'];
+        RANGES.MTT_9MAX.RFI['BTN'] = RANGES.CASH_6MAX.RFI['BTN'];
+        RANGES.MTT_9MAX.RFI['SB']  = RANGES.CASH_6MAX.RFI['SB'];
         
         const LEVELS = [
             { name: "Micro Fish", xp: 0 }, { name: "Table Captain", xp: 500 }, { name: "Grinder", xp: 1500 }, { name: "Shark", xp: 3000 }, { name: "GTO Wizard", xp: 6000 }, { name: "End Boss", xp: 10000 }
@@ -1133,6 +1177,8 @@
                 this.playerName = '';
                 this.campaignLevelIndex = 0;
                 this.handStats = {};
+                this.handStatsBySpot = {};
+                this.statsFilter = 'all';
                 this.inventory = ["felt_emerald", "deck_standard", "prot_none"];
                 this.equipped = {felt: "felt_emerald", deck: "deck_standard", protector: "prot_none"};
                 this.customRange = ["AA","KK","QQ","JJ","TT","99","88","77","AKs","AQs","AJs","ATs","KQs","KJs","QJs","JTs","T9s","98s","87s","AKo","AQo"];
@@ -1186,6 +1232,7 @@
                     this.isPlaying = false;
                 }
 
+                if (StorageService.offline) { setTimeout(() => { this.showToast("OFFLINE: SAVING ON THIS DEVICE ONLY", "error"); }, 1000); }
                 if(!StorageService.isAvailable()) { setTimeout(() => { this.showToast("WARNING: STORAGE BLOCKED. USE FILE EXPORT.", "error"); }, 1000); }
             }
 
@@ -1194,8 +1241,9 @@
                 this.xp = parseInt(StorageService.get('poker_xp', '0'));
                 this.totalHands = parseInt(StorageService.get('poker_total_hands', '0'));
                 this.playerName = StorageService.get('poker_player_name', '');
-                this.campaignLevelIndex = parseInt(StorageService.get('poker_campaign_level', '0'));
+                this.campaignLevelIndex = this.safeCampaignLevel(StorageService.get('poker_campaign_level', '0'));
                 this.handStats = JSON.parse(StorageService.get('poker_hand_stats', '{}'));
+                this.handStatsBySpot = JSON.parse(StorageService.get('poker_hand_stats_by_spot', '{}'));
                 this.inventory = JSON.parse(StorageService.get('poker_inventory', '["felt_emerald", "deck_standard", "prot_none"]'));
                 this.equipped = JSON.parse(StorageService.get('poker_equipped', '{"felt": "felt_emerald", "deck": "deck_standard", "protector": "prot_none"}'));
                 
@@ -1203,6 +1251,12 @@
                 if (rangeStr) this.customRange = JSON.parse(rangeStr);
             }
             
+            safeCampaignLevel(v) {
+                const n = parseInt(v);
+                if (!Number.isFinite(n) || n < 0) return 0;
+                return Math.min(n, CAMPAIGN_LEVELS.length - 1);
+            }
+
             startGame() {
                 const name = "Grinder";
                 this.playerName = name;
@@ -1230,7 +1284,7 @@
                 if (this.isPaused) { this.stopTimer(); if (!silent) { modal.classList.remove('hidden'); modal.classList.add('flex'); } } 
                 else { this.startTimer(false); modal.classList.add('hidden'); modal.classList.remove('flex'); }
             }
-            exitToMenu() { this.isPlaying = false; this.isPaused = false; this.stopTimer(); StorageService.remove('poker_player_name'); document.getElementById('pauseModal').classList.add('hidden'); document.getElementById('pauseModal').classList.remove('flex'); location.reload(); }
+            exitToMenu() { this.isPlaying = false; this.isPaused = false; this.stopTimer(); StorageService.remove('poker_player_name'); document.getElementById('pauseModal').classList.add('hidden'); document.getElementById('pauseModal').classList.remove('flex'); StorageService.flush().finally(() => location.reload()); }
             
             // ---------------- PERSISTENCE METHODS (RESTORED) ----------------
             
@@ -1241,6 +1295,7 @@
                 StorageService.set('poker_inventory', JSON.stringify(this.inventory));
                 StorageService.set('poker_equipped', JSON.stringify(this.equipped));
                 StorageService.set('poker_hand_stats', JSON.stringify(this.handStats));
+                StorageService.set('poker_hand_stats_by_spot', JSON.stringify(this.handStatsBySpot));
                 if(this.playerName) StorageService.set('poker_player_name', this.playerName);
                 StorageService.set('poker_campaign_level', this.campaignLevelIndex);
                 StorageService.set('poker_custom_range', JSON.stringify(this.customRange));
@@ -1267,6 +1322,7 @@
                     inventory: this.inventory,
                     equipped: this.equipped,
                     handStats: this.handStats,
+                    handStatsBySpot: this.handStatsBySpot,
                     playerName: this.playerName,
                     campaignLevel: this.campaignLevelIndex,
                     customRange: this.customRange,
@@ -1336,15 +1392,17 @@
                 StorageService.set('poker_bankroll', data.bankroll); StorageService.set('poker_xp', data.xp); StorageService.set('poker_total_hands', data.totalHands);
                 StorageService.set('poker_inventory', JSON.stringify(data.inventory)); StorageService.set('poker_equipped', JSON.stringify(data.equipped));
                 StorageService.set('poker_hand_stats', JSON.stringify(data.handStats)); if (data.playerName) StorageService.set('poker_player_name', data.playerName);
-                StorageService.set('poker_campaign_level', data.campaignLevel); if (data.customRange) StorageService.set('poker_custom_range', JSON.stringify(data.customRange));
+                StorageService.set('poker_campaign_level', this.safeCampaignLevel(data.campaignLevel)); StorageService.set('poker_hand_stats_by_spot', JSON.stringify(data.handStatsBySpot || {})); if (data.customRange) StorageService.set('poker_custom_range', JSON.stringify(data.customRange));
                 for(let i=1; i<=3; i++) { if(data[`slot_${i}`]) StorageService.set(`poker_save_slot_${i}`, JSON.stringify(data[`slot_${i}`])); }
-                this.showToast("DATA LOADED! RESTARTING..."); setTimeout(() => location.reload(), 1000);
+                // Push to the cloud before reloading, or the reload pulls the old cloud copy back.
+                this.showToast("DATA LOADED! RESTARTING..."); const started = Date.now();
+                StorageService.flush().finally(() => setTimeout(() => location.reload(), Math.max(0, 1000 - (Date.now() - started))));
             }
 
             saveGame(slotIndex, slotName) {
                 const name = slotName || (this.playerName || "Grinder");
                 const data = {
-                    bankroll: this.bankroll, xp: this.xp, totalHands: this.totalHands, inventory: this.inventory, equipped: this.equipped, handStats: this.handStats, playerName: name, timestamp: new Date().toISOString()
+                    bankroll: this.bankroll, xp: this.xp, totalHands: this.totalHands, inventory: this.inventory, equipped: this.equipped, handStats: this.handStats, handStatsBySpot: this.handStatsBySpot, campaignLevel: this.campaignLevelIndex, customRange: this.customRange, playerName: name, timestamp: new Date().toISOString()
                 };
                 StorageService.set(`poker_save_slot_${slotIndex}`, JSON.stringify(data)); this.triggerHaptic(20); this.renderSaveSlots(); this.triggerConfetti(); this.showToast(`SAVED TO SLOT ${slotIndex}`);
             }
@@ -1374,9 +1432,11 @@
             // ---------------- VISUAL RANGE EDITOR LOGIC ----------------
             
             openCustomRangeModal() {
+                this.holdAutoNext();
                 if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; }
                 const modal = document.getElementById('customRangeModal');
                 this.explodeCustomRange();
+                this.customRangeBackup = [...this.customRange];
                 this.renderRangeGrid();
                 this.updateRangeInputDisplay();
                 modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen = true;
@@ -1490,14 +1550,24 @@
                 ta.value = this.customRange.join(', ');
             }
 
+            cancelCustomRange() {
+                if (this.customRangeBackup) this.customRange = this.customRangeBackup;
+                this.customRangeBackup = null;
+                this.updateRangeInputDisplay();
+                this.closeCustomRangeModal();
+            }
+
             closeCustomRangeModal() {
                 const modal = document.getElementById('customRangeModal');
                 modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen = false;
                 if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; }
+                this.releaseAutoNext();
             }
 
             saveCustomRange() {
                 StorageService.set('poker_custom_range', JSON.stringify(this.customRange));
+                this.customRangeBackup = null;
+                this.pendingNextHand = false;
                 this.closeCustomRangeModal();
                 this.streak = 0; 
                 this.updateGamificationUI();
@@ -1531,7 +1601,8 @@
                         e.preventDefault();
                         if (this.isPaused && !this.isModalOpen) { this.togglePause(); return; }
                         const feedback = document.getElementById('feedbackModal');
-                        if (!feedback.classList.contains('hidden')) { this.nextHand(); return; }
+                        if (!feedback.classList.contains('hidden')) { this.closeFeedback(); return; }
+                        if (!document.getElementById('levelUpModal').classList.contains('hidden')) { this.closeLevelUp(); return; }
                         if (this.isModalOpen) return;
                         if (this.isPlaying || this.isPaused) { this.togglePause(); return; }
                     }
@@ -1554,25 +1625,38 @@
             }
             handleDragStart(x, y) { if (!this.isPlaying || this.isPaused) return; this.touchStartX = x; this.touchStartY = y; this.triggerHaptic(10); const overlay = document.getElementById('swipeOverlay'); if(this.hideOverlayTimer) clearTimeout(this.hideOverlayTimer); overlay.classList.remove('hidden'); setTimeout(() => overlay.classList.remove('opacity-0'), 10); this.cardContainer.style.transition = 'none'; }
             handleDragMove(x, y) { if (!this.isPlaying || this.isPaused) return; const deltaX = x - this.touchStartX; const deltaY = y - this.touchStartY; const rotate = deltaX * 0.05; this.cardContainer.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotate}deg)`; const hintRaise = document.getElementById('hintRaise'); const hintCall = document.getElementById('hintCall'); const hintFold = document.getElementById('hintFold'); const highlightThreshold = 80; hintRaise.style.opacity = '0.3'; hintRaise.style.transform = 'translateX(-50%) scale(0.9)'; hintCall.style.opacity = '0.3'; hintCall.style.transform = 'translateY(-50%) scale(0.9)'; hintFold.style.opacity = '0.3'; hintFold.style.transform = 'translateY(-50%) scale(0.9)'; if (Math.abs(deltaY) > Math.abs(deltaX)) { if (deltaY < -highlightThreshold) { hintRaise.style.opacity = '1'; hintRaise.style.transform = 'translateX(-50%) scale(1.2)'; } } else { if (deltaX > highlightThreshold) { hintCall.style.opacity = '1'; hintCall.style.transform = 'translateY(-50%) scale(1.2)'; } else if (deltaX < -highlightThreshold) { hintFold.style.opacity = '1'; hintFold.style.transform = 'translateY(-50%) scale(1.2)'; } } }
-            handleDragEnd(x, y) { if (!this.isPlaying || this.isPaused) return; const deltaX = x - this.touchStartX; const deltaY = y - this.touchStartY; const threshold = 80; const overlay = document.getElementById('swipeOverlay'); overlay.classList.add('opacity-0'); this.hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden'), 300); this.cardContainer.style.transition = 'transform 0.3s ease-out'; if (Math.abs(deltaY) > Math.abs(deltaX)) { if (deltaY < -threshold) { this.cardContainer.style.transform = `translate(0px, -${window.innerHeight}px)`; setTimeout(() => this.handleInput('raise'), 200); return; } } else { if (deltaX > threshold) { this.cardContainer.style.transform = `translate(${window.innerWidth}px, ${deltaY}px) rotate(45deg)`; setTimeout(() => this.handleInput('call'), 200); return; } else if (deltaX < -threshold) { this.cardContainer.style.transform = `translate(-${window.innerWidth}px, ${deltaY}px) rotate(-45deg)`; setTimeout(() => this.handleInput('fold'), 200); return; } } this.cardContainer.style.transform = 'translate(0px, 0px) rotate(0deg)'; }
+            handleDragEnd(x, y) { if (!this.isPlaying || this.isPaused) return; const deltaX = x - this.touchStartX; const deltaY = y - this.touchStartY; const threshold = 80; const overlay = document.getElementById('swipeOverlay'); overlay.classList.add('opacity-0'); this.hideOverlayTimer = setTimeout(() => overlay.classList.add('hidden'), 300); this.cardContainer.style.transition = 'transform 0.3s ease-out'; if (Math.abs(deltaY) > Math.abs(deltaX)) { if (deltaY < -threshold) { this.cardContainer.style.transform = `translate(0px, -${window.innerHeight}px)`; setTimeout(() => this.handleInput('raise'), 200); return; } } else { if (deltaX > threshold && this.callAllowed()) { this.cardContainer.style.transform = `translate(${window.innerWidth}px, ${deltaY}px) rotate(45deg)`; setTimeout(() => this.handleInput('call'), 200); return; } else if (deltaX < -threshold) { this.cardContainer.style.transform = `translate(-${window.innerWidth}px, ${deltaY}px) rotate(-45deg)`; setTimeout(() => this.handleInput('fold'), 200); return; } } this.cardContainer.style.transform = 'translate(0px, 0px) rotate(0deg)'; }
             toggleSound() { this.audio.toggle(); }
-            toggleSaves() { const modal = document.getElementById('saveModal'); const shop = document.getElementById('shopModal'); const stats = document.getElementById('statsModal'); const custom = document.getElementById('customRangeModal'); shop.classList.add('hidden'); shop.classList.remove('flex'); stats.classList.add('hidden'); stats.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderSaveSlots(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } } }
-            toggleStats() { const modal = document.getElementById('statsModal'); const shop = document.getElementById('shopModal'); const saves = document.getElementById('saveModal'); const custom = document.getElementById('customRangeModal'); shop.classList.add('hidden'); shop.classList.remove('flex'); saves.classList.add('hidden'); saves.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderStats(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } } }
-            toggleShop() { const modal = document.getElementById('shopModal'); const stats = document.getElementById('statsModal'); const saves = document.getElementById('saveModal'); const custom = document.getElementById('customRangeModal'); stats.classList.add('hidden'); stats.classList.remove('flex'); saves.classList.add('hidden'); saves.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderShop(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } } }
+            // If a menu opens in the 1.5s between answering and the next deal, hold the deal until it closes.
+            holdAutoNext() { if (this.autoNextTimer) { clearTimeout(this.autoNextTimer); this.autoNextTimer = null; this.pendingNextHand = true; } }
+            releaseAutoNext() { if (this.pendingNextHand) { this.pendingNextHand = false; this.nextHand(); } }
+            // Call is only a real option when facing a raise; raise-only drills have no Call button.
+            callAllowed() { const t = this.currentScenario && this.currentScenario.type; return t === 'DEFENSE' || t === 'VS_3BET'; }
+            toggleSaves() { const modal = document.getElementById('saveModal'); const shop = document.getElementById('shopModal'); const stats = document.getElementById('statsModal'); const custom = document.getElementById('customRangeModal'); shop.classList.add('hidden'); shop.classList.remove('flex'); stats.classList.add('hidden'); stats.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { this.holdAutoNext(); if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderSaveSlots(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } this.releaseAutoNext(); } }
+            toggleStats() { const modal = document.getElementById('statsModal'); const shop = document.getElementById('shopModal'); const saves = document.getElementById('saveModal'); const custom = document.getElementById('customRangeModal'); shop.classList.add('hidden'); shop.classList.remove('flex'); saves.classList.add('hidden'); saves.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { this.holdAutoNext(); if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderStats(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } this.releaseAutoNext(); } }
+            toggleShop() { const modal = document.getElementById('shopModal'); const stats = document.getElementById('statsModal'); const saves = document.getElementById('saveModal'); const custom = document.getElementById('customRangeModal'); stats.classList.add('hidden'); stats.classList.remove('flex'); saves.classList.add('hidden'); saves.classList.remove('flex'); custom.classList.add('hidden'); custom.classList.remove('flex'); if(modal.classList.contains('hidden')) { this.holdAutoNext(); if(this.isPlaying && !this.isPaused) { this.togglePause(true); this.wasAutoPaused=true; } this.renderShop(); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen=true; } else { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen=false; if(this.wasAutoPaused) { this.togglePause(); this.wasAutoPaused=false; } this.releaseAutoNext(); } }
             setupScenario() { if (this.mode === 'campaign') { const level = CAMPAIGN_LEVELS[this.campaignLevelIndex]; const config = level.config; if (config.type === 'RFI') { const pos = config.allowedPos[Math.floor(Math.random() * config.allowedPos.length)]; return { type: 'RFI', heroPos: pos, villainPos: null, villainAction: null, rangeKey: pos }; } else if (config.type === 'DEFENSE') { const pos = 'BB'; let vilPos; do { vilPos = POSITIONS_6MAX[Math.floor(Math.random() * 5)]; } while (vilPos === 'BB'); return { type: 'DEFENSE', heroPos: 'BB', villainPos: vilPos, villainAction: 'raise', rangeKey: `BB_vs_${vilPos}` }; } else { if (Math.random() > 0.4) { const posIdx = Math.floor(Math.random() * 5); return { type: 'RFI', heroPos: POSITIONS_6MAX[posIdx], villainPos: null, villainAction: null, rangeKey: POSITIONS_6MAX[posIdx] }; } else { const villainIdx = Math.floor(Math.random() * 5); return { type: 'DEFENSE', heroPos: 'BB', villainPos: POSITIONS_6MAX[villainIdx], villainAction: 'raise', rangeKey: `BB_vs_${POSITIONS_6MAX[villainIdx]}` }; } } } else if (this.mode === 'rfi') { const posIdx = Math.floor(Math.random() * 5); return { type: 'RFI', heroPos: POSITIONS_6MAX[posIdx], villainPos: null, villainAction: null, rangeKey: POSITIONS_6MAX[posIdx] }; } else if (this.mode === 'mtt_rfi') { const posIdx = Math.floor(Math.random() * 8); return { type: 'RFI', heroPos: POSITIONS_9MAX[posIdx], villainPos: null, villainAction: null, rangeKey: POSITIONS_9MAX[posIdx] }; } else if (this.mode === 'custom') { const posIdx = Math.floor(Math.random() * 5); return { type: 'CUSTOM', heroPos: POSITIONS_6MAX[posIdx], villainPos: null, villainAction: null }; } else if (this.mode === 'vs_3bet') { const posIdx = Math.floor(Math.random() * 5); const heroPos = POSITIONS_6MAX[posIdx]; if(heroPos === 'BB') return { type: 'RFI', heroPos: 'BTN', villainPos: null, villainAction: null, rangeKey: 'BTN' }; const villainIdx = Math.min(5, posIdx + 1 + Math.floor(Math.random() * (5 - posIdx))); const villainPos = POSITIONS_6MAX[villainIdx]; return { type: 'VS_3BET', heroPos: heroPos, villainPos: villainPos, villainAction: '3bet', rangeKey: `${heroPos}_vs_${villainPos}` }; } else { const villainIdx = Math.floor(Math.random() * 5); return { type: 'DEFENSE', heroPos: 'BB', villainPos: POSITIONS_6MAX[villainIdx], villainAction: 'raise', rangeKey: `BB_vs_${POSITIONS_6MAX[villainIdx]}` }; } }
-            updateGamificationUI() { document.getElementById('bankrollDisplay').textContent = Math.floor(this.bankroll).toLocaleString(); const desktopStreakEl = document.getElementById('desktopStreak'); if (desktopStreakEl) desktopStreakEl.textContent = this.streak; const levelInd = document.getElementById('levelIndicator'); const edgeLabel = document.getElementById('edgeCaseLabel'); const edgeInput = document.getElementById('edgeCaseToggle'); const adaptiveContainer = document.getElementById('adaptiveMeterContainer'); const adaptiveFill = document.getElementById('adaptiveHeatBar'); if (this.mode === 'rfi' || this.mode === 'def') { edgeLabel.classList.remove('opacity-50', 'pointer-events-none'); edgeInput.disabled = false; } else { edgeLabel.classList.add('opacity-50', 'pointer-events-none'); edgeInput.disabled = true; if(this.isAdaptive) { this.isAdaptive = false; edgeInput.checked = false; } } if ((this.mode === 'rfi' || this.mode === 'def') && this.isAdaptive) { adaptiveContainer.classList.remove('hidden'); adaptiveFill.className = "h-full transition-all duration-500"; if (this.streak === 0) { adaptiveFill.style.width = "0%"; } else if (this.streak >= 15) { adaptiveFill.style.width = "100%"; adaptiveFill.classList.add('bg-gradient-to-r', 'from-red-500', 'to-purple-600', 'heat-glow-high'); } else if (this.streak >= 5) { const percent = 33 + ((this.streak - 5) * 6); adaptiveFill.style.width = `${Math.min(95, percent)}%`; adaptiveFill.classList.add('bg-yellow-400', 'heat-glow-med'); } else { const percent = this.streak * 8; adaptiveFill.style.width = `${percent}%`; adaptiveFill.classList.add('bg-cyan-500', 'heat-glow-low'); } } else { adaptiveContainer.classList.add('hidden'); } if (this.mode === 'campaign') { const lvl = CAMPAIGN_LEVELS[this.campaignLevelIndex]; levelInd.classList.remove('hidden'); levelInd.textContent = `Lvl ${this.campaignLevelIndex + 1}: ${lvl.name} (${this.campaignStreak}/${lvl.target})`; levelInd.className = "hidden md:block text-[9px] font-mono text-yellow-400 font-bold uppercase tracking-wider bg-yellow-900/50 px-2 py-1 rounded border border-yellow-500/30"; } else { levelInd.className = "hidden md:block text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider bg-slate-800/50 px-2 py-1 rounded border border-white/5"; levelInd.textContent = this.mode === 'custom' ? "Custom Range" : "100BB Deep"; } const levelInfo = this.getCurrentLevel(); document.getElementById('rankTitle').textContent = levelInfo.data.name; document.getElementById('levelBadge').textContent = levelInfo.index; const progress = ((this.xp - levelInfo.data.xp) / (levelInfo.next ? (levelInfo.next.xp - levelInfo.data.xp) : levelInfo.data.xp)) * 100; document.getElementById('xpBar').style.width = `${Math.min(100, Math.max(0, progress))}%`; document.getElementById('xpText').textContent = `${Math.floor(this.xp)} / ${Math.floor(levelInfo.next ? levelInfo.next.xp : 'MAX')} XP`; document.getElementById('multiplierBadge').textContent = `${this.getMultiplier()}x`; document.getElementById('handCounter').textContent = `Hand #${this.totalHands + 1}`; }
-            handleInput(action) { if (this.isDragging) return; if (!this.isPlaying || this.isPaused) return; this.stopTimer(); this.isPlaying = false; this.triggerHaptic(15); if (action === 'fold') this.audio.playDeal(); if (action === 'call' || action === 'raise') this.audio.playChip(); const correctAction = this.getCorrectAction(); let isCorrect = (action === correctAction); if (action === 'timeout') isCorrect = false; this.totalHands++; const genericHand = this.getGenericHand(this.currentHand); if (!this.handStats[genericHand]) this.handStats[genericHand] = { w: 0, l: 0 }; this.previousHandData = { hand: this.currentHand, scenario: this.currentScenario, isCorrect: isCorrect, correctAction: correctAction, userAction: action }; let earnedCash = 0, earnedXp = 0; if (isCorrect) { this.triggerHaptic([50, 50, 50]); this.handStats[genericHand].w++; const baseCash = this.mode === 'def' ? 20 : 10; const baseXp = 25; this.streak++; if (this.mode === 'campaign') { this.campaignStreak++; const currentLvl = CAMPAIGN_LEVELS[this.campaignLevelIndex]; if (this.campaignStreak >= currentLvl.target && this.campaignLevelIndex < 4) { this.showLevelUp(currentLvl); this.campaignLevelIndex++; this.campaignStreak = 0; StorageService.set('poker_campaign_level', this.campaignLevelIndex); } } const multiplier = this.getMultiplier(); const timeBonus = this.timeLeft > 50 ? 1.5 : 1; earnedCash = Math.floor(baseCash * multiplier * timeBonus); earnedXp = Math.floor(baseXp * multiplier); this.bankroll += earnedCash; this.xp += earnedXp; if (this.streak % 5 === 0) this.triggerConfetti(); this.showFloatingText(earnedCash); setTimeout(() => this.audio.playSuccess(), 100); } else { this.triggerHaptic(300); this.handStats[genericHand].l++; this.streak = 0; if(this.mode === 'campaign') this.campaignStreak = 0; const penalty = 50; this.bankroll -= penalty; const xpPenalty = 25; this.xp = Math.max(0, this.xp - xpPenalty); this.showFloatingText(-penalty); setTimeout(() => this.audio.playError(), 100); } this.saveProgress(); this.updateGamificationUI(); this.flashResult(isCorrect, correctAction, earnedCash, earnedXp); this.autoNextTimer = setTimeout(() => { this.nextHand(); }, 1500); }
+            updateGamificationUI() { document.getElementById('bankrollDisplay').textContent = Math.floor(this.bankroll).toLocaleString(); const desktopStreakEl = document.getElementById('desktopStreak'); if (desktopStreakEl) desktopStreakEl.textContent = this.streak; const levelInd = document.getElementById('levelIndicator'); const edgeLabel = document.getElementById('edgeCaseLabel'); const edgeInput = document.getElementById('edgeCaseToggle'); const adaptiveContainer = document.getElementById('adaptiveMeterContainer'); const adaptiveFill = document.getElementById('adaptiveHeatBar'); if (this.mode === 'rfi' || this.mode === 'def') { edgeLabel.classList.remove('opacity-50', 'pointer-events-none'); edgeInput.disabled = false; } else { edgeLabel.classList.add('opacity-50', 'pointer-events-none'); edgeInput.disabled = true; if(this.isAdaptive) { this.isAdaptive = false; edgeInput.checked = false; } } if ((this.mode === 'rfi' || this.mode === 'def') && this.isAdaptive) { adaptiveContainer.classList.remove('hidden'); adaptiveFill.className = "h-full transition-all duration-500"; if (this.streak === 0) { adaptiveFill.style.width = "0%"; } else if (this.streak >= 15) { adaptiveFill.style.width = "100%"; adaptiveFill.classList.add('bg-gradient-to-r', 'from-red-500', 'to-purple-600', 'heat-glow-high'); } else if (this.streak >= 5) { const percent = 33 + ((this.streak - 5) * 6); adaptiveFill.style.width = `${Math.min(95, percent)}%`; adaptiveFill.classList.add('bg-yellow-400', 'heat-glow-med'); } else { const percent = this.streak * 8; adaptiveFill.style.width = `${percent}%`; adaptiveFill.classList.add('bg-cyan-500', 'heat-glow-low'); } } else { adaptiveContainer.classList.add('hidden'); } if (this.mode === 'campaign') { const lvl = CAMPAIGN_LEVELS[this.campaignLevelIndex]; levelInd.classList.remove('hidden'); levelInd.textContent = `Lvl ${this.campaignLevelIndex + 1}: ${lvl.name} (${this.campaignStreak}/${lvl.target})`; levelInd.className = "hidden md:block text-[9px] font-mono text-yellow-400 font-bold uppercase tracking-wider bg-yellow-900/50 px-2 py-1 rounded border border-yellow-500/30"; } else { levelInd.className = "hidden md:block text-[9px] font-mono text-slate-500 font-bold uppercase tracking-wider bg-slate-800/50 px-2 py-1 rounded border border-white/5"; levelInd.textContent = this.mode === 'custom' ? "Custom Range" : "100BB Deep"; } const levelInfo = this.getCurrentLevel(); document.getElementById('rankTitle').textContent = levelInfo.data.name; document.getElementById('levelBadge').textContent = levelInfo.index; const progress = levelInfo.next ? ((this.xp - levelInfo.data.xp) / (levelInfo.next.xp - levelInfo.data.xp)) * 100 : 100; document.getElementById('xpBar').style.width = `${Math.min(100, Math.max(0, progress))}%`; document.getElementById('xpText').textContent = levelInfo.next ? `${Math.floor(this.xp)} / ${levelInfo.next.xp} XP` : `${Math.floor(this.xp)} XP (MAX)`; document.getElementById('multiplierBadge').textContent = `${this.getMultiplier()}x`; document.getElementById('handCounter').textContent = `Hand #${this.totalHands + 1}`; }
+            handleInput(action) { if (this.isDragging) return; if (!this.isPlaying || this.isPaused) return; if (action === 'call' && !this.callAllowed()) return; this.stopTimer(); this.isPlaying = false; this.triggerHaptic(15); if (action === 'fold') this.audio.playDeal(); if (action === 'call' || action === 'raise') this.audio.playChip(); const correctAction = this.getCorrectAction(); let isCorrect = (action === correctAction); if (action === 'timeout') isCorrect = false; this.totalHands++; const genericHand = this.getGenericHand(this.currentHand); if (!this.handStats[genericHand]) this.handStats[genericHand] = { w: 0, l: 0 }; const spotKey = this.getSpotKey(this.currentScenario); if (!this.handStatsBySpot[spotKey]) this.handStatsBySpot[spotKey] = {}; const spotStats = this.handStatsBySpot[spotKey]; if (!spotStats[genericHand]) spotStats[genericHand] = { w: 0, l: 0 }; let earnedCash = 0, earnedXp = 0; let leveledUp = false; if (isCorrect) { this.triggerHaptic([50, 50, 50]); this.handStats[genericHand].w++; spotStats[genericHand].w++; const baseCash = this.mode === 'def' ? 20 : 10; const baseXp = 25; this.streak++; if (this.mode === 'campaign') { this.campaignStreak++; const currentLvl = CAMPAIGN_LEVELS[this.campaignLevelIndex]; if (this.campaignStreak >= currentLvl.target && this.campaignLevelIndex < CAMPAIGN_LEVELS.length - 1) { leveledUp = true; this.showLevelUp(currentLvl); this.campaignLevelIndex++; this.campaignStreak = 0; StorageService.set('poker_campaign_level', this.campaignLevelIndex); } } const multiplier = this.getMultiplier(); const timeBonus = this.timeLeft > 50 ? 1.5 : 1; earnedCash = Math.floor(baseCash * multiplier * timeBonus); earnedXp = Math.floor(baseXp * multiplier); this.bankroll += earnedCash; this.xp += earnedXp; if (this.streak % 5 === 0) this.triggerConfetti(); this.showFloatingText(earnedCash); setTimeout(() => this.audio.playSuccess(), 100); } else { this.triggerHaptic(300); if (action !== 'timeout') { this.handStats[genericHand].l++; spotStats[genericHand].l++; } this.streak = 0; if(this.mode === 'campaign') this.campaignStreak = 0; const penalty = 50; this.bankroll -= penalty; const xpPenalty = 25; this.xp = Math.max(0, this.xp - xpPenalty); earnedCash = -penalty; earnedXp = -xpPenalty; this.showFloatingText(-penalty); setTimeout(() => this.audio.playError(), 100); } this.previousHandData = { hand: this.currentHand, scenario: this.currentScenario, isCorrect: isCorrect, correctAction: correctAction, userAction: action, earnedCash: earnedCash, earnedXp: earnedXp }; this.saveProgress(); this.updateGamificationUI(); this.flashResult(isCorrect, correctAction, earnedCash, earnedXp); if (leveledUp) return; /* the next hand is dealt when the LEVEL UP screen is closed */ this.autoNextTimer = setTimeout(() => { this.autoNextTimer = null; this.nextHand(); }, 1500); }
             flashResult(isCorrect, correctAction, cash, xp) { const overlay = document.getElementById('flashOverlay'); const text = document.getElementById('flashText'); overlay.classList.remove('hidden'); text.classList.remove('scale-0'); text.classList.add('scale-100'); if (isCorrect) { text.innerHTML = `<span class="text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]">CORRECT</span>`; } else { const correctText = correctAction.toUpperCase(); text.innerHTML = `<span class="text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">MISTAKE</span><br><span class="text-2xl text-slate-300 mt-2 block">SHOULD ${correctText}</span>`; } setTimeout(() => { text.classList.remove('scale-100'); text.classList.add('scale-0'); setTimeout(() => { overlay.classList.add('hidden'); }, 300); }, 1200); }
-            reviewLastHand() { if (!this.previousHandData) return; if (this.autoNextTimer) clearTimeout(this.autoNextTimer); const { hand, scenario, isCorrect, correctAction, userAction } = this.previousHandData; const tempHand = this.currentHand; const tempScenario = this.currentScenario; this.currentHand = hand; this.currentScenario = scenario; this.showFeedback(isCorrect, correctAction, userAction, 0, 0); this.currentHand = tempHand; this.currentScenario = tempScenario; }
-            showLevelUp(level) { const modal = document.getElementById('levelUpModal'); const txt = document.getElementById('levelUpText'); const nextLvlName = CAMPAIGN_LEVELS[this.campaignLevelIndex + 1].name; txt.textContent = `You are now: ${nextLvlName}`; modal.classList.remove('hidden'); modal.classList.add('flex'); this.bankroll += level.bonus; this.audio.playSuccess(); this.triggerConfetti(); }
-            closeLevelUp() { document.getElementById('levelUpModal').classList.add('hidden'); document.getElementById('levelUpModal').classList.remove('flex'); }
-            getCorrectAction() { const generic = this.getGenericHand(this.currentHand); let rangeData; if (this.mode === 'custom') { if (this.checkAction(generic, this.customRange, 'raise')) return 'raise'; return 'fold'; } if (this.mode === 'rfi' || (this.mode === 'campaign' && this.currentScenario.type === 'RFI')) { rangeData = RANGES.CASH_6MAX.RFI[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; return 'fold'; } else if (this.mode === 'mtt_rfi') { rangeData = RANGES.MTT_9MAX.RFI[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; return 'fold'; } else if (this.mode === 'vs_3bet') { rangeData = RANGES.CASH_6MAX.VS_3BET[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; if (this.checkAction(generic, rangeData.call, 'call')) return 'call'; return 'fold'; } else { rangeData = RANGES.CASH_6MAX.DEFENSE[this.currentScenario.rangeKey]; if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; if (this.checkAction(generic, rangeData.call, 'call')) return 'call'; return 'fold'; } }
-            checkAction(genericHand, range, actionType) { if (!range) return false; const idx = (r) => RANK_ORDER[r]; const type = genericHand.length === 2 ? 'pair' : genericHand.slice(2); const r1 = genericHand[0], r2 = genericHand[1]; for (let token of range) { token = token.trim(); if (token === genericHand) return true; if (token.includes('+')) { const base = token.replace('+', ''); if (base.length === 2) { if (type === 'pair' && idx(r1) >= idx(base[0])) return true; } else { const baseType = base.slice(2), baseR1 = base[0], baseR2 = base[1]; if (type === baseType && r1 === baseR1 && idx(r2) >= idx(baseR2)) return true; } } if (token.includes('-')) { const [low, high] = token.split('-'); if (low.length === 2) { if (type === 'pair' && idx(r1) >= idx(low[0]) && idx(r1) <= idx(high[0])) return true; } else { const baseType = low.slice(2); if (type === baseType && r1 === low[0] && idx(r2) >= idx(low[1]) && idx(r2) <= idx(high[1])) return true; } } } return false; }
+            reviewLastHand() { if (!this.previousHandData) return; if (this.autoNextTimer) { clearTimeout(this.autoNextTimer); this.autoNextTimer = null; } else if (this.isPlaying && !this.isPaused && !this.reviewInterruptedHand) { /* a new hand is already live: freeze its clock while reviewing */ this.stopTimer(); this.isPlaying = false; this.reviewInterruptedHand = true; } const { hand, scenario, isCorrect, correctAction, userAction, earnedCash, earnedXp } = this.previousHandData; const tempHand = this.currentHand; const tempScenario = this.currentScenario; this.currentHand = hand; this.currentScenario = scenario; this.showFeedback(isCorrect, correctAction, userAction, earnedCash || 0, earnedXp || 0); this.currentHand = tempHand; this.currentScenario = tempScenario; }
+            closeFeedback() { const modal = document.getElementById('feedbackModal'); if (this.reviewInterruptedHand) { this.reviewInterruptedHand = false; modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen = false; this.isPlaying = true; this.startTimer(false); return; } if (this.isPaused) { modal.classList.add('hidden'); modal.classList.remove('flex'); this.isModalOpen = false; return; } this.nextHand(); }
+            showLevelUp(level) { const modal = document.getElementById('levelUpModal'); const txt = document.getElementById('levelUpText'); const nextLvlName = CAMPAIGN_LEVELS[this.campaignLevelIndex + 1].name; txt.textContent = `You are now: ${nextLvlName}`; const bonusEl = document.getElementById('levelUpBonus'); if (bonusEl) bonusEl.textContent = `+$${level.bonus.toLocaleString()}`; modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen = true; this.bankroll += level.bonus; this.audio.playSuccess(); this.triggerConfetti(); }
+            closeLevelUp() { document.getElementById('levelUpModal').classList.add('hidden'); document.getElementById('levelUpModal').classList.remove('flex'); this.isModalOpen = false; this.nextHand(); }
+            getSpotKey(scenario) { const mode = scenario.mode || this.mode; return `${mode}|${scenario.rangeKey || scenario.heroPos}`; }
+            getRangeData(scenario) { const mode = scenario.mode || this.mode; if (scenario.type === 'CUSTOM') return { raise: this.customRange }; if (scenario.type === 'RFI') return (mode === 'mtt_rfi' ? RANGES.MTT_9MAX.RFI : RANGES.CASH_6MAX.RFI)[scenario.rangeKey]; if (scenario.type === 'VS_3BET') return RANGES.CASH_6MAX.VS_3BET[scenario.rangeKey]; return RANGES.CASH_6MAX.DEFENSE[scenario.rangeKey]; }
+            getActionFor(generic, scenario) { const rangeData = this.getRangeData(scenario); if (!rangeData) return 'fold'; if (this.checkAction(generic, rangeData.raise, 'raise')) return 'raise'; if (this.checkAction(generic, rangeData.call, 'call')) return 'call'; return 'fold'; }
+            getCorrectAction() { return this.getActionFor(this.getGenericHand(this.currentHand), this.currentScenario); }
+            handAt(i, j) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; if (i === j) return `${r1}${r2}`; if (i < j) return `${r1}${r2}s`; return `${r2}${r1}o`; }
+            gridPos(generic) { const a = 12 - RANK_ORDER[generic[0]], b = 12 - RANK_ORDER[generic[1]]; if (generic.length === 2) return [a, a]; return generic[2] === 's' ? [a, b] : [b, a]; }
+            // Borderline = a neighbouring cell in this spot's chart has a different answer.
+            isBorderline(generic, scenario) { const act = this.getActionFor(generic, scenario); const [i, j] = this.gridPos(generic); return [[1,0],[-1,0],[0,1],[0,-1]].some(([di, dj]) => { const ni = i + di, nj = j + dj; return ni >= 0 && ni < 13 && nj >= 0 && nj < 13 && this.getActionFor(this.handAt(ni, nj), scenario) !== act; }); }
+            checkAction(genericHand, range, actionType) { if (!range) return false; const idx = (r) => RANK_ORDER[r]; const type = genericHand.length === 2 ? 'pair' : genericHand.slice(2); const r1 = genericHand[0], r2 = genericHand[1]; for (let token of range) { token = token.trim(); if (token === genericHand) return true; if (token.includes('+')) { const base = token.replace('+', ''); if (base.length === 2) { if (type === 'pair' && idx(r1) >= idx(base[0])) return true; } else { const baseType = base.slice(2), baseR1 = base[0], baseR2 = base[1]; if (type === baseType && r1 === baseR1 && idx(r2) >= idx(baseR2)) return true; } } if (token.includes('-')) { /* Ranges may be typed either way round ("88-QQ" or "QQ-88"), so compare against the min and max of the two ends. */ const [a, b] = token.split('-'); if (a.length === 2) { const lo = Math.min(idx(a[0]), idx(b[0])), hi = Math.max(idx(a[0]), idx(b[0])); if (type === 'pair' && idx(r1) >= lo && idx(r1) <= hi) return true; } else { const baseType = a.slice(2); const lo = Math.min(idx(a[1]), idx(b[1])), hi = Math.max(idx(a[1]), idx(b[1])); if (type === baseType && r1 === a[0] && idx(r2) >= lo && idx(r2) <= hi) return true; } } } return false; }
             generateCard() { const r = RANKS[Math.floor(Math.random() * RANKS.length)]; const s = SUITS[Math.floor(Math.random() * SUITS.length)]; return { rank: r, suit: s }; }
-            generateHand() { let hand; while (true) { let c1 = this.generateCard(), c2 = this.generateCard(); while (c1.rank === c2.rank && c1.suit === c2.suit) { c2 = this.generateCard(); } if (RANK_ORDER[c1.rank] < RANK_ORDER[c2.rank]) hand = [c2, c1]; else hand = [c1, c2]; const generic = this.getGenericHand(hand); const type = this.getHandType(generic); if (this.mode === 'custom') break; if (this.mode !== 'rfi' && this.mode !== 'def') break; if (!this.isAdaptive) { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); break; } if (this.streak < 5) { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); break; } if (this.streak < 15) { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); if (type !== 'trash' && type !== 'monster') break; } else { if (type === 'marginal') { const felt = document.getElementById('gameFelt'); if (felt) felt.classList.add('hard-mode-pulse'); break; } } } return hand; }
+            generateHand() { const sc = this.currentScenario; const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); let hand; for (let tries = 0; tries < 20000; tries++) { let c1 = this.generateCard(), c2 = this.generateCard(); while (c1.rank === c2.rank && c1.suit === c2.suit) { c2 = this.generateCard(); } hand = RANK_ORDER[c1.rank] < RANK_ORDER[c2.rank] ? [c2, c1] : [c1, c2]; const generic = this.getGenericHand(hand); /* Vs 3-Bet: you opened, so only deal hands from your opening range */ if (sc && sc.type === 'VS_3BET') { const open = RANGES.CASH_6MAX.RFI[sc.heroPos]; if (open && !this.checkAction(generic, open.raise, 'raise')) continue; } if (!this.isAdaptive || (this.mode !== 'rfi' && this.mode !== 'def') || this.streak < 5) return hand; const borderline = this.isBorderline(generic, sc); if (this.streak < 15) { if (borderline || Math.random() < 0.3) return hand; } else if (borderline) { if (felt) felt.classList.add('hard-mode-pulse'); return hand; } } return hand; }
             getGenericHand(cards) { const r1 = cards[0].rank, r2 = cards[1].rank; if (r1 === r2) return `${r1}${r2}`; const suited = cards[0].suit === cards[1].suit ? 's' : 'o'; return `${r1}${r2}${suited}`; }
             getHandType(generic) { const r1 = generic[0]; const r2 = generic[1]; const type = generic.length === 2 ? 'pair' : generic.slice(2); if (type === 'pair' && 'TJQKA'.includes(r1)) return 'monster'; if (r1 === 'A' && 'KQJ'.includes(r2)) return 'monster'; if (r1 === 'K' && r2 === 'Q' && type === 's') return 'monster'; if (type === 'pair' && !'TJQKA'.includes(r1)) return 'marginal'; if (r1 === 'A' && type === 's' && !'KQJT'.includes(r2)) return 'marginal'; if (type === 's') { const i1 = RANK_ORDER[r1]; const i2 = RANK_ORDER[r2]; if ((i1 - i2) <= 2 && i1 >= 3 && i1 <= 10) return 'marginal'; } if (type === 'o') { if (r1 === 'A' && 'T987'.includes(r2) === false) return 'marginal'; if (r1 === 'K' && 'TJ'.includes(r2)) return 'marginal'; if (r1 === 'Q' && r2 === 'J') return 'marginal'; } return 'trash'; }
-            nextHand() { const feedback = document.getElementById('feedbackModal'); if (feedback) feedback.classList.add('hidden'); const shop = document.getElementById('shopModal'); if (shop) shop.classList.add('hidden'); const stats = document.getElementById('statsModal'); if (stats) stats.classList.add('hidden'); const save = document.getElementById('saveModal'); if (save) save.classList.add('hidden'); const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); if (this.cardContainer) { this.cardContainer.style.transition = 'none'; this.cardContainer.style.transform = 'translate(0px, 0px) rotate(0deg)'; } this.isModalOpen = false; this.isPlaying = true; this.isPaused = false; this.wasAutoPaused = false; this.currentHand = this.generateHand(); this.currentScenario = this.setupScenario(); this.drawUI(); this.audio.playDeal(); this.startTimer(true); }
+            nextHand() { const feedback = document.getElementById('feedbackModal'); if (feedback) feedback.classList.add('hidden'); const shop = document.getElementById('shopModal'); if (shop) shop.classList.add('hidden'); const stats = document.getElementById('statsModal'); if (stats) stats.classList.add('hidden'); const save = document.getElementById('saveModal'); if (save) save.classList.add('hidden'); const felt = document.getElementById('gameFelt'); if (felt) felt.classList.remove('hard-mode-pulse'); if (this.cardContainer) { this.cardContainer.style.transition = 'none'; this.cardContainer.style.transform = 'translate(0px, 0px) rotate(0deg)'; } const levelUp = document.getElementById('levelUpModal'); if (levelUp) { levelUp.classList.add('hidden'); levelUp.classList.remove('flex'); } if (this.autoNextTimer) { clearTimeout(this.autoNextTimer); this.autoNextTimer = null; } this.pendingNextHand = false; this.reviewInterruptedHand = false; this.isModalOpen = false; this.isPlaying = true; this.isPaused = false; this.wasAutoPaused = false; const scenario = this.setupScenario(); scenario.mode = this.mode; this.currentScenario = scenario; this.currentHand = this.generateHand(); this.drawUI(); this.audio.playDeal(); this.startTimer(true); }
             startTimer(reset = true) { if (this.timer) clearInterval(this.timer); if (reset) this.timeLeft = 100; const bars = [document.getElementById('timerBar'), document.getElementById('desktopTimerBar')]; const updateBars = (colorClass, shadowClass) => { bars.forEach(bar => { if(!bar) return; bar.style.width = `${this.timeLeft}%`; bar.className = `h-full w-full transition-all duration-200 ${colorClass} ${shadowClass}`; }); }; if (reset) updateBars('bg-cyan-500', 'shadow-[0_0_10px_rgba(6,182,212,0.5)]'); this.timer = setInterval(() => { this.timeLeft -= 1; let color = 'bg-cyan-500'; let shadow = 'shadow-[0_0_10px_rgba(6,182,212,0.5)]'; if (this.timeLeft < 50) { color = 'bg-yellow-500'; shadow = 'shadow-[0_0_10px_rgba(234,179,8,0.5)]'; } if (this.timeLeft < 20) { color = 'bg-red-600'; shadow = 'shadow-[0_0_10px_rgba(220,38,38,0.5)]'; } updateBars(color, shadow); if (this.timeLeft <= 0) this.handleInput('timeout'); }, 150); }
             stopTimer() { clearInterval(this.timer); }
             drawUI() { document.getElementById('heroPosText').textContent = this.currentScenario.heroPos; const villainDisplay = document.getElementById('villainDisplay'); if (this.currentScenario.villainPos) { villainDisplay.classList.remove('hidden'); document.getElementById('villainPosText').textContent = this.currentScenario.villainPos; } else { villainDisplay.classList.add('hidden'); } const btnCall = document.getElementById('btnCall'); const desktopBtnCall = document.getElementById('desktopBtnCall'); const raiseLabel = document.getElementById('raiseLabel'); const raiseLabelDesktop = document.getElementById('raiseLabelDesktop'); if (this.currentScenario.type === 'RFI' || this.currentScenario.type === 'CUSTOM') { btnCall.classList.add('hidden'); btnCall.parentElement.classList.remove('grid-cols-3'); btnCall.parentElement.classList.add('grid-cols-2'); if (desktopBtnCall) desktopBtnCall.classList.add('hidden'); if (raiseLabel) raiseLabel.textContent = "RAISE"; if (raiseLabelDesktop) raiseLabelDesktop.textContent = "RAISE"; } else if (this.currentScenario.type === 'VS_3BET') { btnCall.classList.remove('hidden'); btnCall.parentElement.classList.remove('grid-cols-2'); btnCall.parentElement.classList.add('grid-cols-3'); if (desktopBtnCall) desktopBtnCall.classList.remove('hidden'); if (raiseLabel) raiseLabel.textContent = "4-BET"; if (raiseLabelDesktop) raiseLabelDesktop.textContent = "4-BET"; } else { btnCall.classList.remove('hidden'); btnCall.parentElement.classList.remove('grid-cols-2'); btnCall.parentElement.classList.add('grid-cols-3'); if (desktopBtnCall) desktopBtnCall.classList.remove('hidden'); if (raiseLabel) raiseLabel.textContent = "3-BET"; if (raiseLabelDesktop) raiseLabelDesktop.textContent = "3-BET"; } const area = document.getElementById('holeCardsArea'); area.innerHTML = ''; this.currentHand.forEach(card => area.innerHTML += this.createCardHTML(card)); }
@@ -1584,12 +1668,14 @@
             getLevelData(xp) { for (let i = LEVELS.length - 1; i >= 0; i--) if (xp >= LEVELS[i].xp) return LEVELS[i]; return LEVELS[0]; }
             getMultiplier() { return this.streak >= 10 ? 4 : (this.streak >= 5 ? 2 : 1); }
             loadGame(slotIndex) { const savedData = StorageService.get(`poker_save_slot_${slotIndex}`, null); if (!savedData) return; const data = JSON.parse(savedData); this.applySaveData(data); }
-            deleteSave(slotIndex) { StorageService.remove(`poker_save_slot_${slotIndex}`); this.renderSaveSlots(); }
+            deleteSave(slotIndex) { StorageService.remove(`poker_save_slot_${slotIndex}`); StorageService.flush(); this.renderSaveSlots(); }
             showFloatingText(amount, isXp = false) { const floatEl = document.getElementById('floatingProfit'); let text = '', classes = ''; if (isXp) { if (typeof amount === 'string') { floatEl.textContent = amount; floatEl.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl md:text-3xl font-black text-red-500 bg-slate-900/90 px-4 py-2 rounded-lg border border-red-500/50 shadow-xl animate-pop z-50 pointer-events-none whitespace-nowrap"; } return; } if (amount > 0) { text = `+$${amount}`; classes = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-emerald-400 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] stroke-black animate-pop z-50 pointer-events-none"; } else { text = `-$${Math.abs(amount)}`; classes = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-red-500 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] stroke-black animate-pop z-50 pointer-events-none"; } floatEl.textContent = text; floatEl.className = classes; setTimeout(() => { floatEl.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm opacity-0 pointer-events-none transition-opacity duration-200"; }, 1000); }
-            showFeedback(isCorrect, correctAction, userAction, earnedCash, earnedXp) { const modal = document.getElementById('feedbackModal'); const title = document.getElementById('feedbackTitle'); const sub = document.getElementById('feedbackSubtitle'); const handDisplay = document.getElementById('feedbackHand'); const rewardDetails = document.getElementById('rewardDetails'); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen = true; if (isCorrect) { title.textContent = "CORRECT!"; title.className = "text-4xl font-black italic uppercase tracking-tighter text-emerald-400 drop-shadow-lg neon-text-emerald"; rewardDetails.classList.remove('hidden'); rewardDetails.innerHTML = `<span class="text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]">+ $${earnedCash}</span><span class="text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]">+ ${earnedXp} XP</span>`; } else { title.textContent = "MISTAKE"; title.className = "text-4xl font-black italic uppercase tracking-tighter text-red-500 drop-shadow-lg"; rewardDetails.classList.add('hidden'); } const handStr = this.getGenericHand(this.currentHand); const pos = this.currentScenario.heroPos; const vil = this.currentScenario.villainPos ? `vs ${this.currentScenario.villainPos}` : ''; const actionText = correctAction === 'raise' ? (this.mode === 'def' ? '3-Bet' : 'Raise') : correctAction.charAt(0).toUpperCase() + correctAction.slice(1); sub.textContent = `${pos} should ${actionText} ${handStr} ${vil}`; const c1 = this.currentHand[0], c2 = this.currentHand[1]; const getColor = (s) => s === 'h' || s === 'd' ? 'text-red-500' : (s === 'c' ? 'text-emerald-500' : 'text-slate-800'); const getSuit = (s) => s === 's' ? '♠' : (s === 'h' ? '♥' : (s === 'd' ? '♦' : '♣')); handDisplay.innerHTML = `${c1.rank}<span class="${getColor(c1.suit)}">${getSuit(c1.suit)}</span>${c2.rank}<span class="${getColor(c2.suit)}">${getSuit(c2.suit)}</span>`; const callLegend = document.getElementById('feedbackLegendCall'); if (this.currentScenario.type === 'RFI' || this.currentScenario.type === 'CUSTOM') { callLegend.classList.add('hidden'); } else { callLegend.classList.remove('hidden'); } this.renderMatrix(); }
-            renderMatrix() { const grid = document.getElementById('matrixGrid'); grid.innerHTML = ''; const currentGeneric = this.getGenericHand(this.currentHand); let rangeData; if (this.mode === 'custom') { rangeData = { raise: this.customRange }; } else if (this.mode === 'rfi' || (this.mode === 'campaign' && this.currentScenario.type === 'RFI')) { rangeData = RANGES.CASH_6MAX.RFI[this.currentScenario.rangeKey]; } else if (this.mode === 'mtt_rfi') { rangeData = RANGES.MTT_9MAX.RFI[this.currentScenario.rangeKey]; } else if (this.mode === 'vs_3bet') { rangeData = RANGES.CASH_6MAX.VS_3BET[this.currentScenario.rangeKey]; } else { rangeData = RANGES.CASH_6MAX.DEFENSE[this.currentScenario.rangeKey]; } if (!rangeData) return; const info = document.getElementById('matrixInfo'); info.className = "mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 border border-white/5 info-box-transition"; info.innerHTML = "Hover for info"; for (let i = 0; i < 13; i++) { for (let j = 0; j < 13; j++) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; let handLabel = '', type = ''; if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; } else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; } else { handLabel = `${r2}${r1}o`; type = 'o'; } const genericCode = handLabel; let bgClass = 'bg-slate-800 text-slate-600 border-slate-700/50'; const isRaise = this.checkAction(genericCode, rangeData?.raise, 'raise'); const isCall = this.checkAction(genericCode, rangeData?.call, 'call'); if (isRaise) bgClass = 'bg-emerald-600 text-white border-emerald-500/50 shadow-inner'; else if (isCall) bgClass = 'bg-blue-600 text-white border-blue-500/50 shadow-inner'; if (genericCode === currentGeneric) bgClass += ' ring-2 ring-white z-10 animate-pulse-fast font-black shadow-[0_0_15px_rgba(255,255,255,0.5)] scale-110'; const cell = document.createElement('div'); cell.className = `matrix-cell ${bgClass}`; cell.onmouseenter = () => { let action = "Fold"; let boxClass = "mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest shadow-lg border info-box-transition "; if(isRaise) { action = "Raise"; boxClass += "bg-emerald-600 border-emerald-400 text-white"; } else if(isCall) { action = "Call"; boxClass += "bg-blue-600 border-blue-400 text-white"; } else { action = "Fold"; boxClass += "bg-slate-700 border-slate-500 text-slate-200"; } info.className = boxClass; info.innerHTML = `${handLabel}: ${action}`; }; grid.appendChild(cell); }} }
-            resetStats() { this.handStats = {}; this.saveProgress(); this.renderStats(); }
-            renderStats() { const grid = document.getElementById('statsGrid'); grid.innerHTML = ''; const detailEl = document.getElementById('selectedHandStats'); detailEl.className = "mt-2 bg-slate-900/80 p-3 rounded-lg w-[260px] border border-white/10 flex items-center justify-center h-12 info-box-transition text-xs font-bold text-slate-400"; detailEl.textContent = "Tap a cell for details"; for (let i = 0; i < 13; i++) { for (let j = 0; j < 13; j++) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; let handLabel = '', type = ''; if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; } else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; } else { handLabel = `${r2}${r1}o`; type = 'o'; } const stats = this.handStats[handLabel] || { w: 0, l: 0 }; const total = stats.w + stats.l; let bgClass = 'bg-slate-800/50 border-slate-700/30 hover:bg-slate-700'; let style = ''; if (total > 0) { const winRate = stats.w / total; const hue = Math.floor(winRate * 120); style = `background-color: hsl(${hue}, 70%, 35%); border-color: rgba(255,255,255,0.1);`; } const cell = document.createElement('div'); cell.className = `matrix-cell transition-colors duration-100 ${total === 0 ? bgClass : ''}`; if (style) cell.style = style; cell.onclick = () => { const rate = total > 0 ? Math.round((stats.w / total) * 100) : 0; let msg = "", boxClass = "mt-2 p-3 rounded-lg w-[260px] border flex items-center justify-center h-12 info-box-transition text-xs font-bold shadow-lg "; if (total === 0) { msg = "No Data"; boxClass += "bg-slate-800 border-slate-600 text-slate-400"; } else { if (rate < 50) { msg = `${handLabel} LEAK (${rate}%)`; boxClass += "bg-red-600 border-red-400 text-white"; } else if (rate > 80) { msg = `${handLabel} MASTERED (${rate}%)`; boxClass += "bg-emerald-600 border-emerald-400 text-white"; } else { msg = `${handLabel} OK (${rate}%)`; boxClass += "bg-yellow-600 border-yellow-400 text-white"; } } detailEl.innerHTML = msg; detailEl.className = boxClass; }; grid.appendChild(cell); }} }
+            showFeedback(isCorrect, correctAction, userAction, earnedCash, earnedXp) { const modal = document.getElementById('feedbackModal'); const title = document.getElementById('feedbackTitle'); const sub = document.getElementById('feedbackSubtitle'); const handDisplay = document.getElementById('feedbackHand'); const rewardDetails = document.getElementById('rewardDetails'); modal.classList.remove('hidden'); modal.classList.add('flex'); this.isModalOpen = true; if (isCorrect) { title.textContent = "CORRECT!"; title.className = "text-4xl font-black italic uppercase tracking-tighter text-emerald-400 drop-shadow-lg neon-text-emerald"; rewardDetails.classList.remove('hidden'); rewardDetails.innerHTML = `<span class="text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]">+ $${earnedCash}</span><span class="text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.1)]">+ ${earnedXp} XP</span>`; } else { title.textContent = userAction === 'timeout' ? "TIME UP" : "MISTAKE"; title.className = "text-4xl font-black italic uppercase tracking-tighter text-red-500 drop-shadow-lg"; rewardDetails.classList.remove('hidden'); rewardDetails.innerHTML = `<span class="text-red-400 bg-red-500/10 px-2.5 py-1 rounded border border-red-500/20">- $${Math.abs(earnedCash)}</span><span class="text-red-400 bg-red-500/10 px-2.5 py-1 rounded border border-red-500/20">- ${Math.abs(earnedXp)} XP</span>`; } const handStr = this.getGenericHand(this.currentHand); const pos = this.currentScenario.heroPos; const vil = this.currentScenario.villainPos ? `vs ${this.currentScenario.villainPos}` : ''; const raiseWord = this.currentScenario.type === 'VS_3BET' ? '4-Bet' : (this.currentScenario.type === 'DEFENSE' ? '3-Bet' : 'Raise'); const actionText = correctAction === 'raise' ? raiseWord : correctAction.charAt(0).toUpperCase() + correctAction.slice(1); sub.textContent = `${pos} should ${actionText} ${handStr} ${vil}` + (this.currentScenario.type === 'RFI' && pos === 'SB' ? ' (SB is raise-or-fold here: limping is left out on purpose)' : ''); const legendRaise = document.getElementById('legendRaiseText'); if (legendRaise) legendRaise.textContent = raiseWord; const c1 = this.currentHand[0], c2 = this.currentHand[1]; const getColor = (s) => s === 'h' || s === 'd' ? 'text-red-500' : (s === 'c' ? 'text-emerald-500' : 'text-slate-800'); const getSuit = (s) => s === 's' ? '♠' : (s === 'h' ? '♥' : (s === 'd' ? '♦' : '♣')); handDisplay.innerHTML = `${c1.rank}<span class="${getColor(c1.suit)}">${getSuit(c1.suit)}</span>${c2.rank}<span class="${getColor(c2.suit)}">${getSuit(c2.suit)}</span>`; const callLegend = document.getElementById('feedbackLegendCall'); if (this.currentScenario.type === 'RFI' || this.currentScenario.type === 'CUSTOM') { callLegend.classList.add('hidden'); } else { callLegend.classList.remove('hidden'); } this.renderMatrix(); }
+            renderMatrix() { const grid = document.getElementById('matrixGrid'); grid.innerHTML = ''; const currentGeneric = this.getGenericHand(this.currentHand); const rangeData = this.getRangeData(this.currentScenario); if (!rangeData) return; const raiseWord = this.currentScenario.type === 'VS_3BET' ? '4-Bet' : (this.currentScenario.type === 'DEFENSE' ? '3-Bet' : 'Raise'); const info = document.getElementById('matrixInfo'); info.className = "mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 border border-white/5 info-box-transition"; info.innerHTML = "Hover for info"; for (let i = 0; i < 13; i++) { for (let j = 0; j < 13; j++) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; let handLabel = '', type = ''; if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; } else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; } else { handLabel = `${r2}${r1}o`; type = 'o'; } const genericCode = handLabel; let bgClass = 'bg-slate-800 text-slate-600 border-slate-700/50'; const isRaise = this.checkAction(genericCode, rangeData?.raise, 'raise'); const isCall = this.checkAction(genericCode, rangeData?.call, 'call'); if (isRaise) bgClass = 'bg-emerald-600 text-white border-emerald-500/50 shadow-inner'; else if (isCall) bgClass = 'bg-blue-600 text-white border-blue-500/50 shadow-inner'; if (genericCode === currentGeneric) bgClass += ' ring-2 ring-white z-10 animate-pulse-fast font-black shadow-[0_0_15px_rgba(255,255,255,0.5)] scale-110'; const cell = document.createElement('div'); cell.className = `matrix-cell ${bgClass}`; cell.onmouseenter = () => { let action = "Fold"; let boxClass = "mt-2 h-8 w-[240px] rounded flex items-center justify-center text-[10px] font-black uppercase tracking-widest shadow-lg border info-box-transition "; if(isRaise) { action = raiseWord; boxClass += "bg-emerald-600 border-emerald-400 text-white"; } else if(isCall) { action = "Call"; boxClass += "bg-blue-600 border-blue-400 text-white"; } else { action = "Fold"; boxClass += "bg-slate-700 border-slate-500 text-slate-200"; } info.className = boxClass; info.innerHTML = `${handLabel}: ${action}`; }; grid.appendChild(cell); }} }
+            resetStats() { this.handStats = {}; this.handStatsBySpot = {}; this.statsFilter = 'all'; this.saveProgress(); this.renderStats(); }
+            setStatsFilter(v) { this.statsFilter = v; this.renderStats(); }
+            spotLabel(key) { const [mode, spot] = key.split('|'); const names = { rfi: '6-Max RFI', def: '6-Max BB Defense', vs_3bet: '6-Max Vs 3-Bet', mtt_rfi: '9-Max RFI', campaign: 'Campaign', custom: 'Custom' }; return `${names[mode] || mode}: ${(spot || '').replace('_vs_', ' vs ')}`; }
+            renderStats() { const MIN_HANDS = 3; const filterEl = document.getElementById('statsFilter'); const spotKeys = Object.keys(this.handStatsBySpot || {}).sort(); if (this.statsFilter !== 'all' && !spotKeys.includes(this.statsFilter)) this.statsFilter = 'all'; if (filterEl) { filterEl.innerHTML = `<option value="all">All drills and seats</option>` + spotKeys.map(k => `<option value="${k}">${this.spotLabel(k)}</option>`).join(''); filterEl.value = this.statsFilter; } const source = this.statsFilter === 'all' ? this.handStats : (this.handStatsBySpot[this.statsFilter] || {}); const grid = document.getElementById('statsGrid'); grid.innerHTML = ''; const detailEl = document.getElementById('selectedHandStats'); detailEl.className = "mt-2 bg-slate-900/80 p-3 rounded-lg w-[260px] border border-white/10 flex items-center justify-center h-12 info-box-transition text-xs font-bold text-slate-400"; detailEl.textContent = "Tap a cell for details"; for (let i = 0; i < 13; i++) { for (let j = 0; j < 13; j++) { const r1 = RANKS[12-i], r2 = RANKS[12-j]; let handLabel = '', type = ''; if (i === j) { handLabel = `${r1}${r2}`; type = 'pair'; } else if (i < j) { handLabel = `${r1}${r2}s`; type = 's'; } else { handLabel = `${r2}${r1}o`; type = 'o'; } const stats = source[handLabel] || { w: 0, l: 0 }; const total = stats.w + stats.l; let bgClass = 'bg-slate-800/50 border-slate-700/30 hover:bg-slate-700'; let style = ''; if (total > 0) { const winRate = stats.w / total; const hue = Math.floor(winRate * 120); style = `background-color: hsl(${hue}, 70%, 35%); border-color: rgba(255,255,255,0.1);` + (total < MIN_HANDS ? ' opacity: 0.35;' : ''); } const cell = document.createElement('div'); cell.className = `matrix-cell transition-colors duration-100 ${total === 0 ? bgClass : ''}`; if (style) cell.style = style; cell.onclick = () => { const rate = total > 0 ? Math.round((stats.w / total) * 100) : 0; let msg = "", boxClass = "mt-2 p-3 rounded-lg w-[260px] border flex items-center justify-center h-12 info-box-transition text-xs font-bold shadow-lg "; if (total === 0) { msg = "No Data"; boxClass += "bg-slate-800 border-slate-600 text-slate-400"; } else if (total < MIN_HANDS) { msg = `${handLabel}: ${stats.w}/${total} right, too few hands to judge`; boxClass += "bg-slate-800 border-slate-600 text-slate-300"; } else { if (rate < 50) { msg = `${handLabel} LEAK (${rate}%)`; boxClass += "bg-red-600 border-red-400 text-white"; } else if (rate > 80) { msg = `${handLabel} MASTERED (${rate}%)`; boxClass += "bg-emerald-600 border-emerald-400 text-white"; } else { msg = `${handLabel} OK (${rate}%)`; boxClass += "bg-yellow-600 border-yellow-400 text-white"; } } detailEl.innerHTML = msg; detailEl.className = boxClass; }; grid.appendChild(cell); }} }
             triggerConfetti() { confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ['#10b981', '#34d399', '#6ee7b7', '#ffffff'], disableForReducedMotion: true }); }
         }
 
