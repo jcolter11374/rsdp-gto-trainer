@@ -843,7 +843,9 @@
                         if (user) {
                             userUid = user.uid;
                             console.log("Logged in as:", userUid);
-                            if (!settled) await this.pullFromCloud();
+                            // If the 8s fallback already started the game from local data, reconcile
+                            // must not silently overwrite either copy (see reconcile).
+                            await this.reconcile(() => settled);
                             finish(true);
                         } else {
                             signInAnonymously(auth).catch((error) => { handleAuthError(error); finish(false); });
@@ -852,41 +854,86 @@
                 });
             }
 
-            // Download Cloud Data -> LocalStorage (Cloud is Truth)
-            static async pullFromCloud() {
+            // Decide which copy wins when this device signs in.
+            // poker_last_modified = when this device last changed its data (stamped by set/remove).
+            // poker_cloud_base    = the cloud version this device last synced with.
+            // Compared against the base, we know which side changed since the last sync:
+            //   only the cloud changed  -> take the cloud copy
+            //   only this device changed (e.g. played offline) -> upload this device's copy
+            //   both changed            -> ask which one to keep, never overwrite silently
+            // A device that has never synced counts as "cloud changed", so a fresh or stale
+            // device can't replace a cloud save it has never seen.
+            static async reconcile(isLate = () => false) {
                 if (!db || !userUid) return;
+                this.syncing = true; // hold debounced uploads until we've decided
                 try {
-                    const docRef = doc(db, "users", userUid);
-                    const docSnap = await getDoc(docRef);
-                    
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        console.log("Cloud Save Found. Syncing...");
-                        
-                        // Map Cloud keys back to LocalStorage
-                        Object.keys(data).forEach(key => {
-                            if (key !== 'lastSynced' && key !== 'userId') {
-                                const val = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
-                                localStorage.setItem(key, val);
-                            }
-                        });
-                        return true;
-                    } else {
+                    const docSnap = await getDoc(doc(db, "users", userUid));
+                    if (!docSnap.exists()) {
                         console.log("New Cloud User. Uploading local data...");
-                        await this.pushToCloud(); // Create initial doc
+                        this.syncing = false;
+                        await this.pushToCloud();
+                        return;
+                    }
+                    const data = docSnap.data();
+                    const cloudTs = Number(data.poker_last_modified) || 0;
+                    const baseRaw = localStorage.getItem('poker_cloud_base');
+                    const base = Number(baseRaw) || 0;
+                    const localTs = Number(localStorage.getItem('poker_last_modified')) || 0;
+                    const cloudChanged = baseRaw === null || cloudTs > base;
+                    const localChanged = localTs > base;
+                    const useCloud = (cloudChanged && localChanged) ? this.askUseCloud(data, cloudTs, localTs) : !localChanged;
+                    this.syncing = false;
+                    if (useCloud) {
+                        this.applyCloud(data, cloudTs);
+                        if (isLate() && cloudChanged) {
+                            // The game already started from this device's older data; restart from the cloud copy.
+                            if (window.game) { window.game.stopTimer(); window.game.isPlaying = false; }
+                            sessionStorage.setItem('poker_cloud_notice', '1');
+                            location.reload();
+                        }
+                    } else {
+                        await this.pushToCloud();
                     }
                 } catch (e) {
-                    console.error("Cloud Pull Failed:", e);
+                    this.syncing = false;
+                    console.error("Cloud Sync Failed:", e);
                 }
+            }
+
+            static askUseCloud(data, cloudTs, localTs) {
+                const when = (t) => t ? new Date(t).toLocaleString() : 'unknown';
+                const money = (v) => '$' + Math.floor(Number(v) || 0).toLocaleString();
+                const msg = "Your progress changed on this device and in the cloud (another device) since they last synced.\n\n" +
+                    `Cloud save: ${money(data.poker_bankroll)}, ${Number(data.poker_total_hands) || 0} hands, last changed ${when(cloudTs)}\n` +
+                    `This device: ${money(this.get('poker_bankroll', 1000))}, ${Number(this.get('poker_total_hands', 0)) || 0} hands, last changed ${when(localTs)}\n\n` +
+                    "OK = use the cloud save\nCancel = keep this device's save (replaces the cloud copy)";
+                try { return window.confirm(msg); } catch (e) { return true; }
+            }
+
+            // Make localStorage an exact copy of the cloud save.
+            static applyCloud(data, cloudTs) {
+                console.log("Cloud Save Found. Syncing...");
+                // Fields missing in the cloud were deleted there (slots, signed-out name): mirror that.
+                ['poker_player_name', 'poker_save_slot_1', 'poker_save_slot_2', 'poker_save_slot_3'].forEach(k => { if (!(k in data)) localStorage.removeItem(k); });
+                Object.keys(data).forEach(key => {
+                    if (key !== 'lastSynced' && key !== 'userId') {
+                        const val = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
+                        localStorage.setItem(key, val);
+                    }
+                });
+                localStorage.setItem('poker_last_modified', String(cloudTs));
+                localStorage.setItem('poker_cloud_base', String(cloudTs));
             }
 
             // Upload LocalStorage -> Cloud Data
             static async pushToCloud() {
-                if (!db || !userUid) return;
+                if (!db || !userUid || this.syncing) return;
                 
+                const localTs = Number(this.get('poker_last_modified', 0)) || Date.now();
                 const payload = {
                     userId: userUid,
                     lastSynced: serverTimestamp(),
+                    poker_last_modified: localTs,
                     // Core Stats
                     poker_bankroll: parseFloat(this.get('poker_bankroll', 1000)),
                     poker_xp: parseInt(this.get('poker_xp', 0)),
@@ -912,6 +959,7 @@
 
                 try {
                     await setDoc(doc(db, "users", userUid), payload, { merge: true });
+                    localStorage.setItem('poker_cloud_base', String(localTs));
                     console.log("Cloud Sync Complete");
                 } catch(e) {
                     console.warn("Cloud Push Failed:", e);
@@ -928,12 +976,13 @@
             static set(key, value) {
                 try {
                     localStorage.setItem(key, value);
+                    localStorage.setItem('poker_last_modified', String(Date.now()));
                     this.debounceCloudSave(); // Trigger background sync
                     return true;
                 } catch (e) { return false; }
             }
 
-            static remove(key) { try { localStorage.removeItem(key); this.debounceCloudSave(); } catch(e) {} }
+            static remove(key) { try { localStorage.removeItem(key); localStorage.setItem('poker_last_modified', String(Date.now())); this.debounceCloudSave(); } catch(e) {} }
 
             // Push now instead of waiting for the debounce. Call before any page reload, or the
             // reload pulls the older cloud copy back over what was just changed.
@@ -1232,6 +1281,7 @@
                     this.isPlaying = false;
                 }
 
+                if (sessionStorage.getItem('poker_cloud_notice')) { sessionStorage.removeItem('poker_cloud_notice'); setTimeout(() => { this.showToast("LOADED NEWER CLOUD SAVE"); }, 800); }
                 if (StorageService.offline) { setTimeout(() => { this.showToast("OFFLINE: SAVING ON THIS DEVICE ONLY", "error"); }, 1000); }
                 if(!StorageService.isAvailable()) { setTimeout(() => { this.showToast("WARNING: STORAGE BLOCKED. USE FILE EXPORT.", "error"); }, 1000); }
             }
