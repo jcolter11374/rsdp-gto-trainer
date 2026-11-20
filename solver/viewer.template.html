@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSDP Preflop Solver</title>
+<style>
+  :root { --bg:#0b1220; --panel:#131c2e; --line:#26324a; --text:#e2e8f0; --dim:#94a3b8; --raise:#10b981; --call:#3b82f6; --fold:#1e293b; --diff:#fbbf24; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 12px 40px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 14px; }
+  .controls { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px; }
+  label { display:block; font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px; }
+  select { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font-size:14px; }
+  .summary { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-bottom:10px; font-size:13px; }
+  .bar { display:flex; height:8px; border-radius:4px; overflow:hidden; margin-top:7px; background:var(--fold); }
+  .grid { display:grid; grid-template-columns: repeat(13, 1fr); gap:2px; }
+  .cell { aspect-ratio: 1; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size: clamp(8px, 2.3vw, 12px); font-weight:600; color:#fff; cursor:pointer; position:relative; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+  .cell.diff { outline:2px solid var(--diff); outline-offset:-2px; }
+  .cell.sel { box-shadow:0 0 0 2px #fff; z-index:1; }
+  .info { min-height: 58px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-top:10px; font-size:13px; }
+  .legend { display:flex; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--dim); margin-top:10px; }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+  .toggle { display:flex; align-items:center; gap:7px; margin:10px 0 0; font-size:13px; color:var(--dim); text-transform:none; letter-spacing:0; }
+  .note { color:var(--dim); font-size:12px; margin-top:18px; border-top:1px solid var(--line); padding-top:12px; }
+  .note b { color:var(--text); }
+  ul { margin:6px 0 0; padding-left:18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>RSDP Preflop Solver</h1>
+  <div class="sub">100bb, no rake. A calculated model, not commercial solver output. See the notes below the chart.</div>
+  <div class="controls">
+    <div><label for="game">Game</label><select id="game"></select></div>
+    <div><label for="spot">Decision</label><select id="spot"></select></div>
+    <div><label for="opener">Opener</label><select id="opener"></select></div>
+    <div><label for="other">Other player</label><select id="other"></select></div>
+  </div>
+  <div class="summary"><div id="title"></div><div id="totals"></div><div class="bar" id="bar"></div></div>
+  <div class="grid" id="grid"></div>
+  <div class="legend">
+    <span><span class="sw" style="background:var(--raise)"></span><span id="lgRaise">Raise</span></span>
+    <span><span class="sw" style="background:var(--call)"></span>Call</span>
+    <span><span class="sw" style="background:var(--fold)"></span>Fold</span>
+    <span id="lgDiff"><span class="sw" style="background:none;outline:2px solid var(--diff);outline-offset:-2px"></span>Trainer chart differs</span>
+  </div>
+  <label class="toggle" id="diffWrap"><input type="checkbox" id="showDiff" checked> Mark hands where the trainer's chart gives a different answer</label>
+  <div class="info" id="info">Tap a hand to see how often the solver takes each action.</div>
+  <div class="note">
+    <b>How to read this.</b> Each cell is split by how often the solver takes each action with that hand. Faded cells are hands that rarely reach this decision.
+    <ul>
+      <li><b>What is calculated:</b> hand-against-hand equities, pot odds, card removal, and the balanced strategy for every seat (found with CFR+, the method commercial solvers use).</li>
+      <li><b>What is assumed:</b> play after the flop is not simulated. A hand's share of the pot is its equity adjusted for position, initiative, playability and stack depth, with settings tuned so overall widths match typical published 100bb ranges.</li>
+      <li><b>Simplifications:</b> every pot is heads-up (a caller or 3-bettor pays a fixed risk for the players still to act), the SB raises or folds, and there is one bet size per decision.</li>
+    </ul>
+    Trust the clear cells. Treat mixed and borderline cells as close decisions that could go either way.
+  </div>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const R = 'AKQJT98765432', N = 169;
+const name = i => { const r = Math.floor(i/13), c = i%13; return r===c ? R[r]+R[c] : r<c ? R[r]+R[c]+'s' : R[c]+R[r]+'o'; };
+const combos = i => { const r = Math.floor(i/13), c = i%13; return r===c ? 6 : r<c ? 4 : 12; };
+const $ = id => document.getElementById(id);
+const SPOTS = [
+  { id:'open',  label:'Open or fold',            raise:'Raise',  needsOther:false },
+  { id:'resp',  label:'Facing the open',         raise:'3-Bet',  needsOther:true },
+  { id:'oVs3',  label:'Opener facing a 3-bet',   raise:'4-Bet',  needsOther:true },
+  { id:'rVs4',  label:'3-bettor facing a 4-bet', raise:'Shove',  needsOther:true },
+  { id:'oVs5',  label:'Opener facing a shove',   raise:'',       needsOther:true },
+];
+let sel = null;
+function fill(el, opts, keep) { const v = keep ? el.value : null; el.innerHTML = opts.map(o => `<option value="${o[0]}">${o[1]}</option>`).join(''); if (v && opts.some(o => o[0] === v)) el.value = v; }
+function setup() {
+  fill($('game'), Object.keys(DATA.games).map(g => [g, g === '6max' ? '6-max' : '9-max']));
+  fill($('spot'), SPOTS.map(s => [s.id, s.label]));
+  ['game','spot','opener','other'].forEach(id => $(id).addEventListener('change', () => { sel = null; refresh(); }));
+  $('showDiff').addEventListener('change', refresh);
+  refresh();
+}
+function refresh() {
+  const g = DATA.games[$('game').value], seats = g.seats;
+  fill($('opener'), seats.slice(0, -1).map(s => [s, s]), true);
+  const op = $('opener').value, spot = SPOTS.find(s => s.id === $('spot').value);
+  const others = seats.slice(seats.indexOf(op) + 1);
+  fill($('other'), others.map(s => [s, s]), true);
+  $('other').disabled = !spot.needsOther;
+  const ot = $('other').value, o = g.openers[op], v = o.vs[ot];
+  // rows: [fold, call, raise] per hand; reach: how often the hand gets here
+  let rows, reach, title, trainerKey = null, sizes = v.sizes;
+  const six = $('game').value === '6max';
+  if (spot.id === 'open') { rows = o.open.map(x => [1-x, 0, x]); reach = null; title = `${op} opens to ${op === 'SB' ? DATA.config.openSB : DATA.config.open}bb, or folds`; trainerKey = (six ? '6-max open: ' : '9-max open: ') + op; }
+  else if (spot.id === 'resp') { rows = v.resp; reach = null; title = `${ot} facing ${op}'s ${sizes.open}bb open (3-bet is to ${sizes.threeBet}bb)`; if (six && ot === 'BB') trainerKey = `BB vs ${op} open`; }
+  else if (spot.id === 'oVs3') { rows = v.oVs3; reach = o.open; title = `${op} opened, ${ot} 3-bet to ${sizes.threeBet}bb (4-bet is to ${sizes.fourBet}bb)`; if (six) trainerKey = `${op} vs ${ot} 3-bet`; }
+  else if (spot.id === 'rVs4') { rows = v.rVs4; reach = v.resp.map(x => x[2]); title = `${ot} 3-bet ${op}'s open and faces a 4-bet to ${sizes.fourBet}bb`; }
+  else { rows = v.oVs5.map(x => [x[0], x[1], 0]); reach = o.open.map((x, i) => x * v.oVs3[i][2]); title = `${op} 4-bet and ${ot} shoved all-in for ${DATA.config.stack}bb`; }
+  const trainer = trainerKey && DATA.trainer[trainerKey];
+  $('diffWrap').style.display = trainer ? '' : 'none'; $('lgDiff').style.display = trainer ? '' : 'none';
+  $('lgRaise').textContent = spot.raise || 'Raise';
+  // totals, weighted by combos and by reach
+  let tot = 0, f = [0,0,0];
+  for (let i = 0; i < N; i++) { const w = combos(i) * (reach ? reach[i] : 1); tot += w; for (let k = 0; k < 3; k++) f[k] += w * rows[i][k]; }
+  f = f.map(x => tot ? x / tot : 0);
+  const pct = x => (100 * x).toFixed(1) + '%';
+  $('title').textContent = title;
+  $('totals').innerHTML = (spot.id === 'open' ? `<b>Raise ${pct(f[2])}</b> of all hands` : [spot.raise && `<b>${spot.raise} ${pct(f[2])}</b>`, `<b>Call ${pct(f[1])}</b>`, `Fold ${pct(f[0])}`].filter(Boolean).join(' · ') + (reach ? ' of the hands that get here' : ''));
+  $('bar').innerHTML = `<div style="width:${100*f[2]}%;background:var(--raise)"></div><div style="width:${100*f[1]}%;background:var(--call)"></div>`;
+  const showDiff = trainer && $('showDiff').checked, T = { f:0, c:1, r:2 }, W = ['Fold', 'Call', spot.raise || 'Raise'];
+  const grid = $('grid'); grid.innerHTML = '';
+  for (let i = 0; i < N; i++) {
+    const [fo, ca, ra] = rows[i], a = 100 * ra, b = 100 * (ra + ca);
+    const d = document.createElement('div');
+    d.className = 'cell'; d.textContent = name(i);
+    d.style.background = `linear-gradient(to right, var(--raise) ${a}%, var(--call) ${a}% ${b}%, var(--fold) ${b}%)`;
+    const rc = reach ? reach[i] : 1;
+    d.style.opacity = 0.25 + 0.75 * Math.min(1, rc * 2);
+    const best = rows[i].indexOf(Math.max(...rows[i]));
+    const differs = trainer && rc > 0.05 && T[trainer[i]] !== best;
+    if (showDiff && differs) d.classList.add('diff');
+    if (sel === i) d.classList.add('sel');
+    d.onclick = () => {
+      sel = i; grid.querySelectorAll('.sel').forEach(x => x.classList.remove('sel')); d.classList.add('sel');
+      const parts = [2,1,0].filter(k => rows[i][k] >= 0.005).map(k => `${W[k]} ${Math.round(100*rows[i][k])}%`).join(' · ');
+      $('info').innerHTML = `<b>${name(i)}</b>: ${parts}` + (reach ? `<br>Gets to this decision ${Math.round(100*rc)}% of the time.` : '') + (trainer ? `<br>Trainer chart: <b>${W[T[trainer[i]]]}</b>` + (differs ? ' (differs from the solver\'s main action)' : '') : '');
+    };
+    grid.appendChild(d);
+  }
+  if (sel === null) $('info').textContent = 'Tap a hand to see how often the solver takes each action.';
+}
+setup();
+</script>
+</body>
+</html>
